@@ -536,3 +536,19 @@ pub fn instance_for_cell(
         attrs,
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::compile_shader;
+
+    #[test]
+    fn embedded_terminal_shaders_compile() {
+        let source = include_str!("shaders.hlsl");
+        for entry in ["vs_text", "vs_cell"] {
+            compile_shader(source, entry, "vs_5_0").expect("vertex shader should compile");
+        }
+        for entry in ["ps_background", "ps_cursor", "ps_text"] {
+            compile_shader(source, entry, "ps_5_0").expect("pixel shader should compile");
+        }
+    }
+}

@@ -138,11 +138,10 @@ pub struct GlyphCache {
     /// family comes from our bundled collection; `None` means DirectWrite
     /// resolves it from the system collection.
     font_collection: Option<IDWriteFontCollection>,
-    /// System font-fallback cascade. Attached to each
-    /// `IDWriteTextFormat1` so DirectWrite transparently swaps in
-    /// Segoe UI Emoji / Symbol / CJK fonts for codepoints the bundled
-    /// IoskeleyMono lacks. `None` on pre-Win8.1 hosts or if
-    /// `GetSystemFontFallback` fails at init.
+    /// Ordered custom cascade attached to each `IDWriteTextFormat1`:
+    /// user-selected installed families, bundled PUA icons, then Windows
+    /// system fallback. `None` only when the runtime cannot construct a
+    /// fallback object.
     font_fallback: Option<IDWriteFontFallback>,
     _d2d_factory: ID2D1Factory,
 
@@ -194,12 +193,17 @@ impl GlyphCache {
         dwrite: &IDWriteFactory,
         bundled_collection: Option<IDWriteFontCollection>,
         font_family: &str,
+        font_fallback_families: &[String],
         font_size_px: f32,
         atlas_size: u32,
     ) -> Result<Self> {
-        // OS-default fallback cascade (emoji / symbol / CJK). Built
-        // once here and shared across all four text-format weights.
-        let font_fallback = super::font_loader::system_font_fallback(dwrite);
+        // Ordered user / bundled-icon / system cascade. Built once here and
+        // shared across all text-format weights.
+        let font_fallback = super::font_loader::font_fallback(
+            dwrite,
+            bundled_collection.as_ref(),
+            font_fallback_families,
+        );
 
         // Resolve the family and the collection as a pair. Passing the
         // bundled collection for a user-selected system font makes
@@ -502,7 +506,7 @@ impl GlyphCache {
         let cell_w = self.metrics.cell_width_px as i32;
         let cell_h = self.metrics.cell_height_px as i32;
 
-        // Nerd-Font PUA icons (U+E000..U+F8FF) are authored as roughly
+        // Nerd-Font PUA icons (BMP and supplementary private-use ranges) are authored as roughly
         // square glyphs (~1000du × ~1000du) with an advance of one
         // monospace cell (~600du). In a tall-narrow cell (e.g. 17×35
         // px at font 28) fitting them by WIDTH collapses to a ~15×15
@@ -526,8 +530,10 @@ impl GlyphCache {
         // `atlasSize.x` as the quad width (via the `max(cellSize.x,
         // atlasSize.x)` branch in `shaders.hlsl::vs_main`).
         let codepoint = key.codepoint;
-        let is_scalable_pua =
-            matches!(codepoint, 0xE000..=0xF8FF) && !matches!(codepoint, 0xE0A0..=0xE0D4);
+        let is_scalable_pua = matches!(
+            codepoint,
+            0xE000..=0xF8FF | 0xF0000..=0xFFFFD | 0x100000..=0x10FFFD
+        ) && !matches!(codepoint, 0xE0A0..=0xE0D4);
         let is_wide_text = is_wide_codepoint(codepoint);
         let is_cjk_text = is_cjk_codepoint(codepoint);
         let metrics = if is_scalable_pua {
@@ -568,7 +574,11 @@ impl GlyphCache {
                     (w, 0.0, Some(scale))
                 }
             }
-            None if is_wide_text => (cell_w.saturating_mul(2), 0.0, None),
+            // When DirectWrite resolves a PUA glyph from the configured or
+            // bundled fallback, `primary_face` cannot provide its metrics.
+            // Reserve the same two-cell overflow budget rather than clipping
+            // the fallback icon to a narrow one-cell atlas slot.
+            None if is_scalable_pua || is_wide_text => (cell_w.saturating_mul(2), 0.0, None),
             None => (cell_w, 0.0, None),
         };
         let alloc = self.allocator.allocate(size2(glyph_w, cell_h))?;
@@ -838,7 +848,12 @@ impl GlyphCache {
         }
     }
 
-    pub fn rebuild(&mut self, font_family: &str, font_size_px: f32) -> Result<()> {
+    pub fn rebuild(
+        &mut self,
+        font_family: &str,
+        font_fallback_families: &[String],
+        font_size_px: f32,
+    ) -> Result<()> {
         // Resolve both values together. In particular, the collection must
         // change when settings switch between a bundled and a system font.
         let resolved = resolve_font_family(
@@ -849,13 +864,18 @@ impl GlyphCache {
         let resolved_family = resolved.family;
         let font_collection = resolved.collection.cloned();
         let collection = font_collection.as_ref();
+        let font_fallback = super::font_loader::font_fallback(
+            &self.dwrite,
+            self.bundled_font_collection.as_ref(),
+            font_fallback_families,
+        );
 
         // Build every fallible DirectWrite object before mutating the cache,
         // leaving the previous font fully usable if the requested font fails.
         let text_format_regular = make_text_format(
             &self.dwrite,
             collection,
-            self.font_fallback.as_ref(),
+            font_fallback.as_ref(),
             &resolved_family,
             font_size_px,
             false,
@@ -864,7 +884,7 @@ impl GlyphCache {
         let text_format_bold = make_text_format(
             &self.dwrite,
             collection,
-            self.font_fallback.as_ref(),
+            font_fallback.as_ref(),
             &resolved_family,
             font_size_px,
             true,
@@ -873,7 +893,7 @@ impl GlyphCache {
         let text_format_italic = make_text_format(
             &self.dwrite,
             collection,
-            self.font_fallback.as_ref(),
+            font_fallback.as_ref(),
             &resolved_family,
             font_size_px,
             false,
@@ -882,7 +902,7 @@ impl GlyphCache {
         let text_format_bold_italic = make_text_format(
             &self.dwrite,
             collection,
-            self.font_fallback.as_ref(),
+            font_fallback.as_ref(),
             &resolved_family,
             font_size_px,
             true,
@@ -891,7 +911,7 @@ impl GlyphCache {
         let text_format_cjk_regular = make_text_format_with_weight(
             &self.dwrite,
             collection,
-            self.font_fallback.as_ref(),
+            font_fallback.as_ref(),
             &resolved_family,
             font_size_px,
             DWRITE_FONT_WEIGHT_MEDIUM,
@@ -900,7 +920,7 @@ impl GlyphCache {
         let text_format_cjk_italic = make_text_format_with_weight(
             &self.dwrite,
             collection,
-            self.font_fallback.as_ref(),
+            font_fallback.as_ref(),
             &resolved_family,
             font_size_px,
             DWRITE_FONT_WEIGHT_MEDIUM,
@@ -938,6 +958,7 @@ impl GlyphCache {
 
         self.font_family = resolved_family;
         self.font_collection = font_collection;
+        self.font_fallback = font_fallback;
         self.font_size_px = font_size_px;
         self.entries.clear();
         self.allocator = AtlasAllocator::new(size2(self.atlas_size as i32, self.atlas_size as i32));
@@ -1034,20 +1055,15 @@ fn make_text_format_with_weight(
     }
     .context("CreateTextFormat failed")?;
 
-    // Attach the system fallback cascade via IDWriteTextFormat1 (Win8.1+).
-    // DirectWrite then substitutes Segoe UI Emoji / Symbol / CJK for
-    // codepoints IoskeleyMono lacks — no per-glyph retry needed; the
-    // D2D DrawText at rasterize time picks the fallback transparently.
-    //
-    // Cast failures fall back silently: the format without a fallback
-    // still draws primary-font glyphs correctly; only the missing-glyph
-    // boxes stay visible.
+    // Attach the custom fallback cascade via IDWriteTextFormat1 (Win8.1+).
+    // Treat failure as a format-construction error rather than silently
+    // displaying missing-glyph boxes while claiming the setting was applied.
     if let Some(fb) = fallback {
-        if let Ok(fmt1) = format.cast::<IDWriteTextFormat1>() {
-            // SAFETY: fmt1 is a valid IDWriteTextFormat1 we own; fb is
-            // a live COM reference from GetSystemFontFallback.
-            let _ = unsafe { fmt1.SetFontFallback(fb) };
-        }
+        let fmt1 = format
+            .cast::<IDWriteTextFormat1>()
+            .context("IDWriteTextFormat1 is unavailable for font fallback")?;
+        // SAFETY: fmt1 and fb are live COM references owned by this cache.
+        unsafe { fmt1.SetFontFallback(fb) }.context("SetFontFallback failed")?;
     }
 
     Ok(format)

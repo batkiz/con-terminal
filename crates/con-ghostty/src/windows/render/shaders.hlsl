@@ -40,7 +40,7 @@ struct VSInstance {
     // Background RGBA8.
     uint   bg            : BGCOLOR;
     // attrs: bit 0 = bold, 1 = italic, 2 = underline, 3 = strike,
-    // 4 = inverse. Unused low bits reserved.
+    // 4 = inverse, 5 = renderer-private CJK contrast profile.
     uint   attrs         : ATTRS;
 };
 
@@ -61,6 +61,9 @@ struct VSOut {
     nointerpolation float4 fg : FGCOLOR;
     nointerpolation float4 bg : BGCOLOR;
     nointerpolation uint   attrs : ATTRS;
+    // Background-only instances carry a zero-sized atlas rectangle. Keep
+    // them from sampling whatever glyph happens to occupy texel (0, 0).
+    nointerpolation uint   hasGlyph : TEXCOORD2;
 };
 
 // ── Helpers ────────────────────────────────────────────────────────────
@@ -71,6 +74,43 @@ float4 unpackRGBA(uint v) {
         float((v >>  8) & 0xFF),
         float( v        & 0xFF)
     ) / 255.0;
+}
+
+// DirectWrite-compatible grayscale gamma correction, adapted from Windows
+// Terminal's MIT-licensed AtlasEngine dwrite_helpers.hlsl. The atlas contains
+// neutral linear coverage; correction must happen here because only the pixel
+// shader knows whether the glyph is dark-on-light or light-on-dark.
+float enhanceContrast(float alpha, float contrast) {
+    return alpha * (contrast + 1.0) / (alpha * contrast + 1.0);
+}
+
+float applyAlphaCorrection(float alpha, float foregroundIntensity) {
+    // Polynomial ratios for DirectWrite's default gamma 1.8.
+    const float4 gammaRatios = float4(
+        0.148054421,
+       -0.894594550,
+        1.47590804,
+       -0.324668258
+    );
+    return alpha + alpha * (1.0 - alpha)
+        * ((gammaRatios.x * foregroundIntensity + gammaRatios.y) * alpha
+            + (gammaRatios.z * foregroundIntensity + gammaRatios.w));
+}
+
+float correctedGrayscaleCoverage(
+    float rawCoverage,
+    float3 foreground,
+    float grayscaleEnhancedContrast
+) {
+    // DirectWrite applies its grayscale contrast adjustment primarily to dark
+    // foreground colors. This avoids over-bold white text while keeping dark
+    // text smooth and readable on Con's default light theme.
+    float contrast = grayscaleEnhancedContrast * saturate(
+        dot(foreground, float3(0.30, 0.59, 0.11) * -4.0) + 3.0
+    );
+    float contrasted = enhanceContrast(rawCoverage, contrast);
+    float intensity = dot(foreground, float3(0.25, 0.50, 0.25));
+    return saturate(applyAlphaCorrection(contrasted, intensity));
 }
 
 // ── Atlas binding ──────────────────────────────────────────────────────
@@ -119,9 +159,10 @@ VSOut vs_main(uint vid : SV_VertexID, VSInstance inst) {
     o.atlasUV = (atlasTopLeft + atlasPixels * float2(corner)) * invAtlasSize;
     o.cellUV  = float2(corner);
 
-    o.fg    = unpackRGBA(inst.fg);
-    o.bg    = unpackRGBA(inst.bg);
-    o.attrs = inst.attrs;
+    o.fg       = unpackRGBA(inst.fg);
+    o.bg       = unpackRGBA(inst.bg);
+    o.attrs    = inst.attrs;
+    o.hasGlyph = all(inst.atlasSize > 0u) ? 1u : 0u;
     return o;
 }
 
@@ -132,7 +173,9 @@ float4 ps_main(VSOut i) : SV_Target {
     // so any platform-level subpixel fallback becomes neutral coverage
     // instead of colored fringe.
     float3 coverage_rgb = atlas.Sample(samp, i.atlasUV).rgb;
-    float coverage = max(coverage_rgb.r, max(coverage_rgb.g, coverage_rgb.b));
+    float raw_coverage = i.hasGlyph != 0u
+        ? max(coverage_rgb.r, max(coverage_rgb.g, coverage_rgb.b))
+        : 0.0;
 
     // Inverse handling: swap fg/bg when attr bit 4 is set (SGR 7 or
     // a selected cell via the CPU-side XOR). After the swap the new
@@ -152,6 +195,13 @@ float4 ps_main(VSOut i) : SV_Target {
         fg.a = 1.0;
         bg.a = 1.0;
     }
+
+    float grayscale_contrast = (i.attrs & 32u) != 0u ? 1.45 : 1.0;
+    float coverage = correctedGrayscaleCoverage(
+        raw_coverage,
+        fg.rgb,
+        grayscale_contrast
+    );
 
     // Underline / strikethrough: draw a 1-pixel-tall fg band inside
     // the cell. Bands are in cell-local UV space:

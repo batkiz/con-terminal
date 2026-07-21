@@ -50,7 +50,7 @@ use windows::Win32::Graphics::Dxgi::DXGI_ERROR_WAS_STILL_DRAWING;
 
 use super::profile::{perf_trace_enabled, perf_trace_verbose};
 use super::vt::{ATTR_INVERSE, ATTR_STRIKE, ATTR_UNDERLINE, Cell, ScreenSnapshot};
-use atlas::{GlyphCache, GlyphKey};
+use atlas::{GlyphCache, GlyphKey, is_cjk_codepoint};
 use pipeline::{Globals, Instance, Pipeline, instance_for_cell};
 
 pub use super::vt::ThemeColors;
@@ -62,6 +62,9 @@ const ALTERNATE_SCREEN_BACKGROUND_OPACITY_FLOOR: f32 = 1.0;
 /// without reallocation; panes larger than that grow via
 /// `Pipeline::ensure_instance_capacity` in the hot path.
 const INITIAL_INSTANCE_CAPACITY: u32 = 16 * 1024;
+/// Renderer-private instance bit: use the CJK grayscale contrast profile.
+/// VT attributes occupy bits 0..=4.
+const INTERNAL_ATTR_CJK: u8 = 1 << 5;
 
 #[derive(Debug, Clone)]
 pub struct RendererConfig {
@@ -1020,7 +1023,12 @@ impl Renderer {
                 glyph,
                 cell.fg,
                 apply_opacity(cell.bg),
-                effective_attrs,
+                effective_attrs
+                    | if is_cjk_codepoint(cell.codepoint) {
+                        INTERNAL_ATTR_CJK
+                    } else {
+                        0
+                    },
             );
             has_wide_glyph |= glyph.w as u32 > cell_w_px;
             if is_cursor_cell {
@@ -1652,4 +1660,18 @@ fn create_staging_texture(
     unsafe { device.CreateTexture2D(&desc, None, Some(&mut texture)) }
         .context("CreateTexture2D(staging) failed")?;
     texture.context("staging CreateTexture2D produced no texture")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Renderer, RendererConfig};
+
+    #[test]
+    fn renderer_initializes_with_linear_grayscale_atlas() {
+        let renderer = Renderer::new(&RendererConfig::default())
+            .expect("Windows renderer should initialize with WARP fallback");
+        let metrics = renderer.metrics();
+        assert!(metrics.cell_width_px > 0);
+        assert!(metrics.cell_height_px > 0);
+    }
 }

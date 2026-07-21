@@ -470,3 +470,14 @@ pub fn instance_for_cell(
         attrs: attrs as u32,
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::compile_shader;
+
+    #[test]
+    fn embedded_terminal_shaders_compile() {
+        compile_shader("vs_main", "vs_5_0").expect("vertex shader should compile");
+        compile_shader("ps_main", "ps_5_0").expect("pixel shader should compile");
+    }
+}

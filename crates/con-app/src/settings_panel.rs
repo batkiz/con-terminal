@@ -7,7 +7,8 @@ use con_core::{
     Config,
     config::{
         AppearanceConfig, DEFAULT_TERMINAL_FONT_FAMILY, MAX_UI_FONT_SIZE, MIN_UI_FONT_SIZE,
-        TabsOrientation, is_gpui_pseudo_font_family, sanitize_terminal_font_family,
+        TabsOrientation, is_bundled_terminal_font_family, is_gpui_pseudo_font_family,
+        sanitize_terminal_font_fallback, sanitize_terminal_font_family,
     },
 };
 use futures::{FutureExt, StreamExt};
@@ -201,6 +202,8 @@ pub struct SettingsPanel {
     provider_model_status_error: bool,
 
     terminal_font_select: Entity<SelectState<SearchableVec<String>>>,
+    terminal_fallback_select: Entity<SelectState<SearchableVec<String>>>,
+    terminal_font_families: Vec<String>,
     ui_font_select: Entity<SelectState<SearchableVec<String>>>,
     cursor_style_select: Entity<SelectState<Vec<String>>>,
     font_size_input: Entity<InputState>,
@@ -404,7 +407,10 @@ impl SettingsPanel {
         for family in [
             DEFAULT_TERMINAL_FONT_FAMILY,
             sanitized_terminal_family.as_str(),
-        ] {
+        ]
+        .into_iter()
+        .chain(config.terminal.font_fallback.iter().map(String::as_str))
+        {
             if !family.is_empty() && !preferred.iter().any(|existing| existing == family) {
                 preferred.push(family.to_string());
             }
@@ -1124,6 +1130,28 @@ impl SettingsPanel {
         cx.new(|cx| SelectState::new(items, selected_index, window, cx).searchable(true))
     }
 
+    fn sync_terminal_fallback_select(&self, window: &mut Window, cx: &mut Context<Self>) {
+        let candidates = self
+            .terminal_font_families
+            .iter()
+            .filter(|family| {
+                !family.eq_ignore_ascii_case(&self.config.terminal.font_family)
+                    && !is_bundled_terminal_font_family(family)
+                    && !self
+                        .config
+                        .terminal
+                        .font_fallback
+                        .iter()
+                        .any(|fallback| fallback.eq_ignore_ascii_case(family))
+            })
+            .cloned()
+            .collect::<Vec<_>>();
+        self.terminal_fallback_select.update(cx, |select, cx| {
+            select.set_items(SearchableVec::new(candidates), window, cx);
+            select.set_selected_index(None, window, cx);
+        });
+    }
+
     fn suggestion_provider_options() -> Vec<String> {
         let mut options = vec!["Same as active provider".to_string()];
         options.extend(
@@ -1304,6 +1332,21 @@ impl SettingsPanel {
             window,
             cx,
         );
+        let fallback_candidates = terminal_font_families
+            .iter()
+            .filter(|family| {
+                !family.eq_ignore_ascii_case(&terminal_font_family)
+                    && !is_bundled_terminal_font_family(family)
+                    && !config
+                        .terminal
+                        .font_fallback
+                        .iter()
+                        .any(|fallback| fallback.eq_ignore_ascii_case(family))
+            })
+            .cloned()
+            .collect::<Vec<_>>();
+        let terminal_fallback_select =
+            Self::make_searchable_string_select(&fallback_candidates, "", window, cx);
         let ui_font_select = Self::make_searchable_string_select(
             &ui_font_families,
             &config.appearance.ui_font_family,
@@ -1549,9 +1592,32 @@ impl SettingsPanel {
         cx.subscribe_in(
             &terminal_font_select,
             window,
-            |this, _, ev: &SelectEvent<SearchableVec<String>>, _, cx| {
+            |this, _, ev: &SelectEvent<SearchableVec<String>>, window, cx| {
                 if let SelectEvent::Confirm(Some(value)) = ev {
                     this.config.terminal.font_family = sanitize_terminal_font_family(value);
+                    this.config.terminal.font_fallback = sanitize_terminal_font_fallback(
+                        &this.config.terminal.font_fallback,
+                        &this.config.terminal.font_family,
+                    );
+                    this.sync_terminal_fallback_select(window, cx);
+                    cx.emit(AppearancePreview);
+                    cx.notify();
+                }
+            },
+        )
+        .detach();
+        cx.subscribe_in(
+            &terminal_fallback_select,
+            window,
+            |this, _, ev: &SelectEvent<SearchableVec<String>>, window, cx| {
+                if let SelectEvent::Confirm(Some(value)) = ev {
+                    let mut fallback = this.config.terminal.font_fallback.clone();
+                    fallback.push(value.clone());
+                    this.config.terminal.font_fallback = sanitize_terminal_font_fallback(
+                        &fallback,
+                        &this.config.terminal.font_family,
+                    );
+                    this.sync_terminal_fallback_select(window, cx);
                     cx.emit(AppearancePreview);
                     cx.notify();
                 }
@@ -1639,6 +1705,8 @@ impl SettingsPanel {
             provider_model_status: None,
             provider_model_status_error: false,
             terminal_font_select,
+            terminal_fallback_select,
+            terminal_font_families,
             ui_font_select,
             cursor_style_select,
             font_size_input,
@@ -1774,6 +1842,7 @@ impl SettingsPanel {
                 cx,
             );
         });
+        self.sync_terminal_fallback_select(window, cx);
         self.ui_font_select.update(cx, |select, cx| {
             select.set_selected_value(&self.config.appearance.ui_font_family, window, cx);
         });
@@ -2475,6 +2544,10 @@ impl SettingsPanel {
         };
         self.config.terminal.font_family =
             sanitize_terminal_font_family(&self.config.terminal.font_family);
+        self.config.terminal.font_fallback = sanitize_terminal_font_fallback(
+            &self.config.terminal.font_fallback,
+            &self.config.terminal.font_family,
+        );
         self.config.terminal.font_size = font_size_text.parse().unwrap_or(14.0);
         let parsed_ui_font_size = if ui_font_size_text.is_empty() {
             Some(self.config.appearance.ui_font_size)
@@ -3461,9 +3534,120 @@ impl SettingsPanel {
         }
     }
 
+    fn move_terminal_fallback(&mut self, index: usize, offset: isize) {
+        let target = index as isize + offset;
+        if index < self.config.terminal.font_fallback.len()
+            && target >= 0
+            && (target as usize) < self.config.terminal.font_fallback.len()
+        {
+            self.config
+                .terminal
+                .font_fallback
+                .swap(index, target as usize);
+        }
+    }
+
+    fn render_terminal_fallback_list(&self, cx: &mut Context<Self>) -> Div {
+        let muted = cx.theme().muted_foreground;
+        let foreground = cx.theme().foreground;
+        let hover = cx.theme().muted.opacity(0.08);
+        let count = self.config.terminal.font_fallback.len();
+        let mut list = div().flex().flex_col();
+
+        if count == 0 {
+            return list.child(
+                div()
+                    .px(px(16.0))
+                    .py(px(10.0))
+                    .text_size(px(11.0))
+                    .text_color(muted.opacity(0.55))
+                    .child(
+                        "No preferred fallbacks. Bundled icons and system fallback remain enabled.",
+                    ),
+            );
+        }
+
+        for (index, family) in self.config.terminal.font_fallback.iter().enumerate() {
+            let move_up = Button::new(SharedString::from(format!("terminal-fallback-up-{index}")))
+                .icon(Icon::default().path("phosphor/caret-up.svg"))
+                .small()
+                .ghost()
+                .disabled(index == 0)
+                .on_click(cx.listener(move |this, _, _, cx| {
+                    this.move_terminal_fallback(index, -1);
+                    cx.emit(AppearancePreview);
+                    cx.notify();
+                }));
+            let move_down = Button::new(SharedString::from(format!(
+                "terminal-fallback-down-{index}"
+            )))
+            .icon(Icon::default().path("phosphor/caret-down.svg"))
+            .small()
+            .ghost()
+            .disabled(index + 1 == count)
+            .on_click(cx.listener(move |this, _, _, cx| {
+                this.move_terminal_fallback(index, 1);
+                cx.emit(AppearancePreview);
+                cx.notify();
+            }));
+            let remove = Button::new(SharedString::from(format!(
+                "terminal-fallback-remove-{index}"
+            )))
+            .icon(Icon::default().path("phosphor/trash.svg"))
+            .small()
+            .ghost()
+            .on_click(cx.listener(move |this, _, window, cx| {
+                if index < this.config.terminal.font_fallback.len() {
+                    this.config.terminal.font_fallback.remove(index);
+                    this.sync_terminal_fallback_select(window, cx);
+                    cx.emit(AppearancePreview);
+                    cx.notify();
+                }
+            }));
+
+            list = list.child(
+                div()
+                    .flex()
+                    .items_center()
+                    .justify_between()
+                    .min_h(px(34.0))
+                    .px(px(16.0))
+                    .hover(|style| style.bg(hover))
+                    .child(
+                        div()
+                            .text_size(px(11.5))
+                            .text_color(foreground)
+                            .child(family.clone()),
+                    )
+                    .child(
+                        div()
+                            .flex()
+                            .items_center()
+                            .gap(px(2.0))
+                            .text_color(muted)
+                            .child(move_up)
+                            .child(move_down)
+                            .child(remove),
+                    ),
+            );
+        }
+        list.child(
+            div()
+                .px(px(16.0))
+                .pb(px(10.0))
+                .text_size(px(10.5))
+                .text_color(muted.opacity(0.5))
+                .child(
+                    "Con's bundled Nerd Font and the system cascade are appended automatically.",
+                ),
+        )
+    }
+
     fn render_appearance(&self, cx: &mut Context<Self>) -> Div {
         let current_theme = self.config.terminal.theme.clone();
         let terminal_font_select = self.terminal_font_select.clone();
+        let terminal_fallback_select = self.terminal_fallback_select.clone();
+        let terminal_fallback_list = self.render_terminal_fallback_list(cx);
         let ui_font_select = self.ui_font_select.clone();
         let font_size_input = self.font_size_input.clone();
         let ui_font_size_input = self.ui_font_size_input.clone();
@@ -3679,6 +3863,15 @@ impl SettingsPanel {
                             "Search fonts…",
                             theme,
                         ))
+                        .child(row_separator(theme))
+                        .child(searchable_select_row(
+                            "Add Fallback",
+                            "Preferred fonts for missing CJK, symbols, and other glyphs.",
+                            &terminal_fallback_select,
+                            "Search installed fonts…",
+                            theme,
+                        ))
+                        .child(terminal_fallback_list)
                         .child(row_separator(theme))
                         .child(searchable_select_row(
                             "UI Font",

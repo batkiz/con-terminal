@@ -32,6 +32,7 @@ pub struct TerminalColors {
 pub struct GhosttyConfigPatch {
     pub colors: Option<TerminalColors>,
     pub font_family: Option<String>,
+    pub font_fallback: Option<Vec<String>>,
     pub font_size: Option<f32>,
     pub background_opacity: Option<f32>,
     pub background_opacity_cells: Option<bool>,
@@ -110,6 +111,7 @@ impl GhosttyApp {
     pub fn new(
         _colors: Option<&TerminalColors>,
         _font_family: Option<&str>,
+        _font_fallback: Option<&[String]>,
         _font_size: Option<f32>,
         _background_opacity: Option<f32>,
         _background_blur: Option<bool>,
@@ -140,6 +142,7 @@ impl GhosttyApp {
         &self,
         _colors: &TerminalColors,
         _font_family: &str,
+        _font_fallback: &[String],
         _font_size: f32,
         _background_opacity: f32,
         _background_blur: bool,
@@ -205,6 +208,7 @@ impl GhosttyTerminal {
         &self,
         _colors: &TerminalColors,
         _font_family: &str,
+        _font_fallback: &[String],
         _font_size: f32,
         _background_opacity: f32,
         _background_blur: bool,

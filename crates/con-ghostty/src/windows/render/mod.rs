@@ -69,6 +69,7 @@ const INTERNAL_ATTR_CJK: u8 = 1 << 5;
 #[derive(Debug, Clone)]
 pub struct RendererConfig {
     pub font_family: String,
+    pub font_fallback: Vec<String>,
     pub font_size_px: f32,
     pub initial_width: u32,
     pub initial_height: u32,
@@ -90,6 +91,7 @@ impl Default for RendererConfig {
     fn default() -> Self {
         Self {
             font_family: font_loader::BUNDLED_FONT_FAMILY.to_string(),
+            font_fallback: Vec::new(),
             font_size_px: 14.0,
             initial_width: 800,
             initial_height: 600,
@@ -262,6 +264,7 @@ impl Renderer {
             &dwrite,
             bundled_collection,
             &config.font_family,
+            &config.font_fallback,
             config.font_size_px,
             ATLAS_SIZE_PX,
         )
@@ -360,11 +363,16 @@ impl Renderer {
         (self.width_px, self.height_px)
     }
 
-    pub fn rebuild_atlas(&self, font_family: &str, font_size_px: f32) -> Result<()> {
+    pub fn rebuild_atlas(
+        &self,
+        font_family: &str,
+        font_fallback: &[String],
+        font_size_px: f32,
+    ) -> Result<()> {
         self.atlas
             .lock()
             .expect("atlas mutex poisoned in rebuild_atlas()")
-            .rebuild(font_family, font_size_px)?;
+            .rebuild(font_family, font_fallback, font_size_px)?;
         *self
             .last_generation
             .lock()
@@ -1673,5 +1681,18 @@ mod tests {
         let metrics = renderer.metrics();
         assert!(metrics.cell_width_px > 0);
         assert!(metrics.cell_height_px > 0);
+    }
+
+    #[test]
+    fn renderer_initializes_with_preferred_font_fallbacks() {
+        let config = RendererConfig {
+            font_family: "Consolas".to_string(),
+            font_fallback: vec![
+                "Microsoft YaHei UI".to_string(),
+                "Segoe UI Emoji".to_string(),
+            ],
+            ..RendererConfig::default()
+        };
+        Renderer::new(&config).expect("preferred DirectWrite fallback chain should be valid");
     }
 }

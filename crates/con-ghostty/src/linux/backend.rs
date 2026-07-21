@@ -16,6 +16,7 @@ use crate::vt::ScreenSnapshot;
 pub struct LinuxBackendConfig {
     pub shell_program: Option<String>,
     pub font_family: Option<String>,
+    pub font_fallback: Vec<String>,
     pub font_size: Option<f32>,
     pub colors: Option<TerminalColors>,
     /// 0.0 (fully see-through) … 1.0 (opaque). Multiplied into the
@@ -38,6 +39,7 @@ impl Default for LinuxBackendConfig {
         Self {
             shell_program: None,
             font_family: None,
+            font_fallback: Vec::new(),
             font_size: None,
             colors: None,
             background_opacity: 1.0,
@@ -58,6 +60,7 @@ impl LinuxGhosttyApp {
     pub fn new(
         colors: Option<&TerminalColors>,
         font_family: Option<&str>,
+        font_fallback: Option<&[String]>,
         font_size: Option<f32>,
         background_opacity: Option<f32>,
         background_blur: Option<bool>,
@@ -72,6 +75,7 @@ impl LinuxGhosttyApp {
             config: Mutex::new(LinuxBackendConfig {
                 shell_program: default_linux_shell_program(),
                 font_family: font_family.map(ToOwned::to_owned),
+                font_fallback: font_fallback.unwrap_or_default().to_vec(),
                 font_size,
                 colors: colors.cloned(),
                 background_opacity: clamp_opacity(background_opacity.unwrap_or(1.0)),
@@ -98,6 +102,7 @@ impl LinuxGhosttyApp {
         &self,
         colors: &TerminalColors,
         font_family: &str,
+        font_fallback: &[String],
         font_size: f32,
         background_opacity: f32,
         background_blur: bool,
@@ -110,6 +115,7 @@ impl LinuxGhosttyApp {
     ) -> Result<(), String> {
         let mut config = self.config.lock();
         config.font_family = Some(font_family.to_string());
+        config.font_fallback = font_fallback.to_vec();
         config.font_size = Some(font_size);
         config.colors = Some(colors.clone());
         config.background_opacity = clamp_opacity(background_opacity);
@@ -295,6 +301,7 @@ impl LinuxGhosttyTerminal {
         &self,
         colors: &TerminalColors,
         _font_family: &str,
+        _font_fallback: &[String],
         _font_size: f32,
         _background_opacity: f32,
         _background_blur: bool,

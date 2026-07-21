@@ -13,8 +13,9 @@
 //! and layout state. The Windows D3D11 path remains the model for the
 //! eventual native renderer.
 
+use std::collections::HashMap;
 use std::ops::Range;
-use std::sync::Arc;
+use std::sync::{Arc, LazyLock};
 
 use con_ghostty::{
     ATTR_BOLD, ATTR_INVERSE, ATTR_ITALIC, ATTR_STRIKE, ATTR_UNDERLINE, GhosttyApp,
@@ -39,6 +40,139 @@ const DEFAULT_CELL_WIDTH_RATIO: f32 = 0.62;
 const DEFAULT_CELL_HEIGHT_RATIO: f32 = 1.45;
 const TERMINAL_PADDING_X_PX: f32 = 12.0;
 const TERMINAL_PADDING_Y_PX: f32 = 10.0;
+const BUNDLED_LINUX_FONT_FAMILY: &str = "IoskeleyMono";
+
+#[derive(Clone, Hash, PartialEq, Eq)]
+struct FontResolutionKey {
+    font: Font,
+    codepoint: u32,
+}
+
+#[derive(Clone)]
+struct LinuxFontFace {
+    id: fontdb::ID,
+    canonical_family: SharedString,
+    weight: u16,
+    style: fontdb::Style,
+}
+
+static LINUX_FONT_DATABASE: LazyLock<fontdb::Database> = LazyLock::new(|| {
+    let mut database = fontdb::Database::new();
+    database.load_system_fonts();
+    for font in [
+        include_bytes!("../../../assets/fonts/IoskeleyMono-Regular.ttf").as_slice(),
+        include_bytes!("../../../assets/fonts/IoskeleyMono-Bold.ttf").as_slice(),
+        include_bytes!("../../../assets/fonts/IoskeleyMono-Italic.ttf").as_slice(),
+        include_bytes!("../../../assets/fonts/IoskeleyMono-BoldItalic.ttf").as_slice(),
+    ] {
+        database.load_font_data(font.to_vec());
+    }
+    database
+});
+
+static LINUX_FONT_FACE_INDEX: LazyLock<HashMap<String, Vec<LinuxFontFace>>> = LazyLock::new(|| {
+    let mut index = HashMap::<String, Vec<LinuxFontFace>>::new();
+    for face in LINUX_FONT_DATABASE.faces() {
+        let canonical_family = face
+            .families
+            .first()
+            .map(|(name, _)| SharedString::from(name.clone()))
+            .unwrap_or_else(|| SharedString::from(face.post_script_name.clone()));
+        let indexed = LinuxFontFace {
+            id: face.id,
+            canonical_family,
+            weight: face.weight.0,
+            style: face.style,
+        };
+        for (family, _) in &face.families {
+            index
+                .entry(normalize_linux_family(family))
+                .or_default()
+                .push(indexed.clone());
+        }
+    }
+    index
+});
+
+static LINUX_FONT_RESOLUTION_CACHE: LazyLock<
+    parking_lot::Mutex<HashMap<FontResolutionKey, SharedString>>,
+> = LazyLock::new(|| parking_lot::Mutex::new(HashMap::new()));
+
+fn normalize_linux_family(family: &str) -> String {
+    family
+        .chars()
+        .filter(|ch| !ch.is_whitespace())
+        .flat_map(char::to_lowercase)
+        .collect()
+}
+
+fn linux_family_for_glyph(font: &Font, glyph: char) -> SharedString {
+    // Terminal control/ASCII glyphs overwhelmingly belong to the primary and
+    // bypassing the database keeps the hot shell-prompt path lock-free.
+    if glyph.is_ascii() {
+        return font.family.clone();
+    }
+
+    let key = FontResolutionKey {
+        font: font.clone(),
+        codepoint: glyph as u32,
+    };
+    if let Some(family) = LINUX_FONT_RESOLUTION_CACHE.lock().get(&key).cloned() {
+        return family;
+    }
+
+    let mut candidates = Vec::with_capacity(
+        1 + font
+            .fallbacks
+            .as_ref()
+            .map_or(0, |fallbacks| fallbacks.fallback_list().len()),
+    );
+    candidates.push(font.family.as_ref());
+    if let Some(fallbacks) = font.fallbacks.as_ref() {
+        candidates.extend(fallbacks.fallback_list().iter().map(String::as_str));
+    }
+
+    let resolved = candidates
+        .into_iter()
+        .find_map(|family| linux_family_with_glyph(family, glyph, font.weight, font.style))
+        .unwrap_or_else(|| font.family.clone());
+    let mut cache = LINUX_FONT_RESOLUTION_CACHE.lock();
+    if cache.len() >= 16_384 {
+        cache.clear();
+    }
+    cache.insert(key, resolved.clone());
+    resolved
+}
+
+fn linux_family_with_glyph(
+    family: &str,
+    glyph: char,
+    weight: FontWeight,
+    style: FontStyle,
+) -> Option<SharedString> {
+    let desired_style = match style {
+        FontStyle::Normal => fontdb::Style::Normal,
+        FontStyle::Italic => fontdb::Style::Italic,
+        FontStyle::Oblique => fontdb::Style::Oblique,
+    };
+    let desired_weight = weight.0.clamp(1.0, u16::MAX as f32) as u16;
+    let face = LINUX_FONT_FACE_INDEX
+        .get(&normalize_linux_family(family))?
+        .iter()
+        .min_by_key(|face| {
+            (
+                u8::from(face.style != desired_style),
+                face.weight.abs_diff(desired_weight),
+            )
+        })?;
+    let has_glyph = LINUX_FONT_DATABASE.with_face_data(face.id, |data, index| {
+        ttf_parser::Face::parse(data, index)
+            .ok()
+            .and_then(|face| face.glyph_index(glyph))
+            .is_some()
+    })?;
+    has_glyph.then(|| face.canonical_family.clone())
+}
 
 /// Resolved logical font size used for both the cell-grid estimate
 /// (`estimate_surface_size`) and the actual paint (`render`). Both
@@ -118,6 +252,14 @@ pub struct GhosttyView {
 }
 
 pub fn init(cx: &mut App) {
+    // Build the system-font coverage index off the UI thread so the first CJK
+    // or symbol glyph does not pause terminal row construction.
+    let _ = std::thread::Builder::new()
+        .name("con-font-fallback-index".to_string())
+        .spawn(|| {
+            LazyLock::force(&LINUX_FONT_FACE_INDEX);
+        });
+
     // Tab is a focus-navigation key in GPUI Root. Bind it inside the
     // terminal context so shells receive completion requests instead of
     // the window moving focus away from the terminal.
@@ -876,7 +1018,7 @@ impl GhosttyView {
         };
 
         let style = RowCacheStyleKey {
-            font_family: base_font.family.clone(),
+            font: base_font.clone(),
             default_fg,
             default_bg,
             font_size,
@@ -1030,10 +1172,20 @@ impl Render for GhosttyView {
         let font_size_px = effective_font_size(self.initial_font_size);
         let line_height_px = cell_height_px(font_size_px);
         let cell_width_px = cell_width_px(font_size_px);
+        let mut fallback_families = self.app.backend_config().font_fallback;
+        if !con_core::config::is_bundled_terminal_font_family(&theme.mono_font_family)
+            && !fallback_families
+                .iter()
+                .any(|family| con_core::config::is_bundled_terminal_font_family(family))
+        {
+            fallback_families.push(BUNDLED_LINUX_FONT_FAMILY.to_string());
+        }
+        let fallbacks =
+            (!fallback_families.is_empty()).then(|| FontFallbacks::from_fonts(fallback_families));
         let mono_font = Font {
             family: theme.mono_font_family.clone(),
             features: FontFeatures::default(),
-            fallbacks: None,
+            fallbacks,
             weight: FontWeight::NORMAL,
             style: FontStyle::Normal,
         };
@@ -1514,7 +1666,7 @@ struct CachedTerminalRow {
 
 #[derive(Clone, PartialEq)]
 struct RowCacheStyleKey {
-    font_family: SharedString,
+    font: Font,
     default_fg: Hsla,
     default_bg: Hsla,
     font_size: Pixels,
@@ -1626,7 +1778,7 @@ fn build_terminal_row(
 
     let mut text = String::with_capacity(kept.len());
     let mut runs: Vec<TextRun> = Vec::new();
-    let mut last_signature: Option<(u32, u32, u8, bool, bool)> = None;
+    let mut last_signature: Option<(u32, u32, u8, bool, bool, SharedString)> = None;
     let mut active_run_len: usize = 0;
     let mut active_style: Option<RowStyle> = None;
 
@@ -1654,8 +1806,11 @@ fn build_terminal_row(
         let is_cursor = cursor_col == Some(col_idx);
         let is_selected =
             selection_cols.is_some_and(|(start, end)| col_idx >= start && col_idx <= end);
-        let signature = (cell.fg, cell.bg, cell.attrs, is_cursor, is_selected);
-        let style = RowStyle::from_cell(
+        let glyph: char = match cell.codepoint {
+            0 => ' ',
+            cp => char::from_u32(cp).unwrap_or('\u{FFFD}'),
+        };
+        let mut style = RowStyle::from_cell(
             cell,
             default_fg,
             default_bg,
@@ -1664,13 +1819,17 @@ fn build_terminal_row(
             is_selected,
             selection_bg,
         );
+        style.font.family = linux_family_for_glyph(&style.font, glyph);
+        let signature = (
+            cell.fg,
+            cell.bg,
+            cell.attrs,
+            is_cursor,
+            is_selected,
+            style.font.family.clone(),
+        );
 
-        let glyph: char = match cell.codepoint {
-            0 => ' ',
-            cp => char::from_u32(cp).unwrap_or('\u{FFFD}'),
-        };
-
-        if Some(signature) != last_signature {
+        if Some(&signature) != last_signature.as_ref() {
             flush_run(&mut runs, &mut active_style, &mut active_run_len);
             active_style = Some(style);
             last_signature = Some(signature);
@@ -1864,12 +2023,12 @@ fn encode_special_key(key: &str, modifiers: &Modifiers, decckm: bool) -> Option<
 #[cfg(test)]
 mod tests {
     use super::{
-        DEFAULT_FONT_SIZE, MIN_FONT_SIZE_PX, TerminalSelection, build_terminal_row, cell_height_px,
-        cell_width_px, effective_font_size, extract_selection_text, rows_needing_refresh,
-        vt_color_to_hsla,
+        BUNDLED_LINUX_FONT_FAMILY, DEFAULT_FONT_SIZE, MIN_FONT_SIZE_PX, TerminalSelection,
+        build_terminal_row, cell_height_px, cell_width_px, effective_font_size,
+        extract_selection_text, rows_needing_refresh, vt_color_to_hsla,
     };
     use con_ghostty::{ATTR_BOLD, ATTR_INVERSE, ATTR_UNDERLINE, ScreenSnapshot, VtCell, VtCursor};
-    use gpui::{Font, FontFeatures, FontStyle, FontWeight, Hsla, Rgba};
+    use gpui::{Font, FontFallbacks, FontFeatures, FontStyle, FontWeight, Hsla, Rgba};
 
     fn base_font() -> Font {
         Font {
@@ -1936,6 +2095,24 @@ mod tests {
         let _no_cursor = build_terminal_row(&cells, fg(), bg(), &base_font(), None, None, bg());
         let _with_cursor =
             build_terminal_row(&cells, fg(), bg(), &base_font(), Some(2), None, bg());
+    }
+
+    #[test]
+    fn terminal_row_uses_bundled_fallback_for_private_use_icons() {
+        let font = Font {
+            family: "Definitely Missing Primary".into(),
+            features: FontFeatures::default(),
+            fallbacks: Some(FontFallbacks::from_fonts(vec![
+                BUNDLED_LINUX_FONT_FAMILY.to_string(),
+            ])),
+            weight: FontWeight::NORMAL,
+            style: FontStyle::Normal,
+        };
+        let cells = [make_cell('\u{E0B0}', 0, 0, 0)];
+        let row = build_terminal_row(&cells, fg(), bg(), &font, None, None, bg());
+
+        assert_eq!(row.runs.len(), 1);
+        assert_eq!(row.runs[0].font.family.as_ref(), BUNDLED_LINUX_FONT_FAMILY);
     }
 
     #[test]

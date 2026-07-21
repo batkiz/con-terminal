@@ -957,6 +957,8 @@ impl ConWorkspace {
         cx: &mut Context<Self>,
     ) {
         let next_terminal_font_family = sanitize_terminal_font_family(&term_config.font_family);
+        let next_terminal_font_fallback =
+            sanitize_terminal_font_fallback(&term_config.font_fallback, &next_terminal_font_family);
         let next_ui_font_family = appearance_config.ui_font_family.clone();
         let next_ui_font_size = appearance_config.ui_font_size;
         let next_font_size = term_config.font_size;
@@ -972,9 +974,11 @@ impl ConWorkspace {
         let next_background_image_repeat = appearance_config.background_image_repeat;
         let next_tabs_orientation = appearance_config.tabs_orientation;
 
-        let font_changed = self.terminal_font_family != next_terminal_font_family
+        let terminal_font_metrics_changed = self.terminal_font_family != next_terminal_font_family
             || (self.font_size - next_font_size).abs() > f32::EPSILON;
-        let terminal_appearance_changed = font_changed
+        let terminal_font_changed = terminal_font_metrics_changed
+            || self.terminal_font_fallback != next_terminal_font_fallback;
+        let terminal_appearance_changed = terminal_font_changed
             || self.terminal_cursor_style != next_terminal_cursor_style
             || (self.terminal_opacity - next_terminal_opacity).abs() > f32::EPSILON
             || self.terminal_blur != next_terminal_blur
@@ -983,11 +987,12 @@ impl ConWorkspace {
             || self.background_image_position != next_background_image_position
             || self.background_image_fit != next_background_image_fit
             || self.background_image_repeat != next_background_image_repeat;
-        let ui_theme_changed = font_changed
+        let ui_theme_changed = terminal_font_metrics_changed
             || self.ui_font_family != next_ui_font_family
             || (self.ui_font_size - next_ui_font_size).abs() > f32::EPSILON;
 
         self.terminal_font_family = next_terminal_font_family;
+        self.terminal_font_fallback = next_terminal_font_fallback;
         self.ui_font_family = next_ui_font_family;
         self.ui_font_size = next_ui_font_size;
         self.font_size = next_font_size;
@@ -1004,7 +1009,7 @@ impl ConWorkspace {
             cx.notify();
         });
         self.sync_tab_strip_motion();
-        if font_changed {
+        if terminal_font_metrics_changed {
             let editor_views = self
                 .tabs
                 .iter()
@@ -1098,6 +1103,7 @@ impl ConWorkspace {
                     theme,
                     &colors,
                     &self.terminal_font_family,
+                    &self.terminal_font_fallback,
                     self.font_size,
                     self.terminal_opacity,
                     self.terminal_blur,
@@ -1114,6 +1120,7 @@ impl ConWorkspace {
         if let Err(e) = self.ghostty_app.update_appearance(
             &colors,
             &self.terminal_font_family,
+            &self.terminal_font_fallback,
             self.font_size,
             self.terminal_opacity,
             self.terminal_blur,

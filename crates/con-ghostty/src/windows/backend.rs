@@ -34,6 +34,7 @@ impl WindowsGhosttyApp {
     pub fn new(
         colors: Option<&TerminalColors>,
         font_family: Option<&str>,
+        font_fallback: Option<&[String]>,
         font_size: Option<f32>,
         background_opacity: Option<f32>,
         _background_blur: Option<bool>,
@@ -47,6 +48,9 @@ impl WindowsGhosttyApp {
         let mut config = RendererConfig::default();
         if let Some(family) = font_family {
             config.font_family = family.to_string();
+        }
+        if let Some(fallback) = font_fallback {
+            config.font_fallback = fallback.to_vec();
         }
         if let Some(size) = font_size {
             config.font_size_px = size;
@@ -85,6 +89,7 @@ impl WindowsGhosttyApp {
         &self,
         colors: &TerminalColors,
         font_family: &str,
+        font_fallback: &[String],
         font_size: f32,
         background_opacity: f32,
         _background_blur: bool,
@@ -98,6 +103,7 @@ impl WindowsGhosttyApp {
         let theme = theme_from_colors(colors);
         let mut config = self.config.lock();
         config.font_family = font_family.to_string();
+        config.font_fallback = font_fallback.to_vec();
         config.font_size_px = font_size;
         config.clear_color = [
             colors.background[0] as f32 / 255.0,
@@ -196,6 +202,7 @@ impl WindowsGhosttyTerminal {
         &self,
         colors: &TerminalColors,
         font_family: &str,
+        font_fallback: &[String],
         font_size: f32,
         background_opacity: f32,
         _background_blur: bool,
@@ -209,7 +216,7 @@ impl WindowsGhosttyTerminal {
         if let Some(session) = self.inner.lock().as_ref() {
             let theme = theme_from_colors(colors);
             session
-                .set_font(font_family, font_size)
+                .set_font(font_family, font_fallback, font_size)
                 .map_err(|err| err.to_string())?;
             session.set_appearance(Some(&theme), clamp_opacity(background_opacity));
         }

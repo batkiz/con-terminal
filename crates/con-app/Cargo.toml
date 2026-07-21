@@ -88,6 +88,8 @@ smallvec = "1"
 raw-window-handle = "0.6"
 unicode-width.workspace = true
 x11rb = "0.13.2"
+fontdb = "0.23"
+ttf-parser = "0.25"
 
 [target.'cfg(unix)'.dependencies]
 socket2 = "0.6"

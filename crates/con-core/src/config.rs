@@ -67,6 +67,13 @@ pub fn is_gpui_pseudo_font_family(name: &str) -> bool {
     name.trim_start().starts_with('.')
 }
 
+pub fn is_bundled_terminal_font_family(name: &str) -> bool {
+    name.chars()
+        .filter(|ch| !ch.is_whitespace())
+        .collect::<String>()
+        .eq_ignore_ascii_case("IoskeleyMono")
+}
+
 pub fn sanitize_terminal_font_family(name: &str) -> String {
     let trimmed = name.trim();
     if trimmed.is_empty() || is_gpui_pseudo_font_family(trimmed) {
@@ -76,10 +83,33 @@ pub fn sanitize_terminal_font_family(name: &str) -> String {
     }
 }
 
+pub fn sanitize_terminal_font_fallback(fonts: &[String], primary: &str) -> Vec<String> {
+    let primary = sanitize_terminal_font_family(primary);
+    let mut sanitized = Vec::new();
+    for font in fonts {
+        let font = font.trim();
+        if font.is_empty()
+            || is_gpui_pseudo_font_family(font)
+            || is_bundled_terminal_font_family(font)
+            || font.eq_ignore_ascii_case(&primary)
+            || sanitized
+                .iter()
+                .any(|existing: &String| existing.eq_ignore_ascii_case(font))
+        {
+            continue;
+        }
+        sanitized.push(font.to_string());
+    }
+    sanitized
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct TerminalConfig {
     pub font_family: String,
+    /// Ordered preferred fallback families. Con's bundled icon font and the
+    /// platform/system cascade are appended after this list.
+    pub font_fallback: Vec<String>,
     pub font_size: f32,
     pub theme: String,
     pub cursor_style: String,
@@ -89,6 +119,7 @@ impl Default for TerminalConfig {
     fn default() -> Self {
         Self {
             font_family: default_font_family(),
+            font_fallback: Vec::new(),
             font_size: default_font_size(),
             theme: default_theme(),
             cursor_style: default_cursor_style(),
@@ -835,6 +866,11 @@ impl SkillsConfig {
 
 impl Config {
     pub fn normalize(&mut self) {
+        self.terminal.font_family = sanitize_terminal_font_family(&self.terminal.font_family);
+        self.terminal.font_fallback = sanitize_terminal_font_fallback(
+            &self.terminal.font_fallback,
+            &self.terminal.font_family,
+        );
         self.appearance.normalize();
         self.keybindings.normalize();
     }
@@ -988,7 +1024,7 @@ mod tests {
     use super::{
         Config, DEFAULT_TERMINAL_FONT_FAMILY, NetworkConfig, SkillsConfig, TabsOrientation,
         config_declares_agent_provider_provenance, migrate_agent_provider_provenance,
-        sanitize_terminal_font_family,
+        sanitize_terminal_font_fallback, sanitize_terminal_font_family,
     };
     use con_agent::ProviderKind;
 
@@ -1064,6 +1100,60 @@ mod tests {
         assert_eq!(
             sanitize_terminal_font_family("JetBrains Mono"),
             "JetBrains Mono"
+        );
+    }
+
+    #[test]
+    fn terminal_font_fallback_sanitizer_preserves_order_and_removes_invalid_entries() {
+        let fonts = vec![
+            " Sarasa Mono SC ".to_string(),
+            "jetbrains mono".to_string(),
+            ".SystemUIFont".to_string(),
+            "IoskeleyMono".to_string(),
+            "SARASA MONO SC".to_string(),
+            "Segoe UI Emoji".to_string(),
+        ];
+        assert_eq!(
+            sanitize_terminal_font_fallback(&fonts, "JetBrains Mono"),
+            vec!["Sarasa Mono SC", "Segoe UI Emoji"]
+        );
+    }
+
+    #[test]
+    fn legacy_terminal_config_defaults_to_no_preferred_fallbacks() {
+        let config: Config = toml::from_str(
+            r#"
+[terminal]
+font_family = "JetBrains Mono"
+font_size = 15.0
+"#,
+        )
+        .unwrap();
+        assert!(config.terminal.font_fallback.is_empty());
+    }
+
+    #[test]
+    fn terminal_font_fallback_round_trips_in_order_and_normalizes() {
+        let mut config: Config = toml::from_str(
+            r#"
+[terminal]
+font_family = " JetBrains Mono "
+font_fallback = [" Sarasa Mono SC ", "Segoe UI Emoji", "sarasa mono sc", ".SystemUIFont"]
+"#,
+        )
+        .unwrap();
+        config.normalize();
+        assert_eq!(config.terminal.font_family, "JetBrains Mono");
+        assert_eq!(
+            config.terminal.font_fallback,
+            vec!["Sarasa Mono SC", "Segoe UI Emoji"]
+        );
+
+        let encoded = toml::to_string(&config).unwrap();
+        let decoded: Config = toml::from_str(&encoded).unwrap();
+        assert_eq!(
+            decoded.terminal.font_fallback,
+            config.terminal.font_fallback
         );
     }
 

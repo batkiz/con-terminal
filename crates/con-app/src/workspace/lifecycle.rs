@@ -28,6 +28,8 @@ impl ConWorkspace {
             s
         });
         let terminal_font_family = sanitize_terminal_font_family(&config.terminal.font_family);
+        let terminal_font_fallback =
+            sanitize_terminal_font_fallback(&config.terminal.font_fallback, &terminal_font_family);
         let ui_font_family = config.appearance.ui_font_family.clone();
         let ui_font_size = config.appearance.ui_font_size;
         let font_size = config.terminal.font_size;
@@ -57,6 +59,7 @@ impl ConWorkspace {
         let ghostty_app = con_ghostty::GhosttyApp::new(
             Some(&colors),
             Some(&terminal_font_family),
+            Some(&terminal_font_fallback),
             Some(font_size),
             Some(terminal_opacity),
             Some(terminal_blur),
@@ -674,6 +677,7 @@ impl ConWorkspace {
             active_tab,
             is_quick_terminal: false,
             terminal_font_family,
+            terminal_font_fallback,
             ui_font_family,
             ui_font_size,
             font_size,

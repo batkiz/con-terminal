@@ -23,10 +23,12 @@
 
 use anyhow::{Context, Result};
 use windows::Win32::Graphics::DirectWrite::{
-    IDWriteFactory, IDWriteFactory2, IDWriteFactory5, IDWriteFontCollection, IDWriteFontFallback,
-    IDWriteFontFile, IDWriteFontSet, IDWriteFontSetBuilder1, IDWriteInMemoryFontFileLoader,
+    DWRITE_FONT_STRETCH_NORMAL, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_WEIGHT_NORMAL,
+    DWRITE_UNICODE_RANGE, IDWriteFactory, IDWriteFactory2, IDWriteFactory5, IDWriteFont1,
+    IDWriteFontCollection, IDWriteFontFallback, IDWriteFontFile, IDWriteFontSet,
+    IDWriteFontSetBuilder1, IDWriteInMemoryFontFileLoader,
 };
-use windows::core::Interface;
+use windows::core::{Interface, PCWSTR};
 
 /// Family name the bundled TTFs advertise (must match the `name` table's
 /// family-name record inside the TTF). `IoskeleyMono-*.ttf` follow the
@@ -180,11 +182,7 @@ pub fn build_bundled_collection(dwrite: &IDWriteFactory) -> Result<Option<IDWrit
 /// and the fallback boxes stay visible. `log::warn` surfaces that so
 /// the regression is obvious in logs.
 ///
-/// Nerd-Font-specific glyphs (private-use-area icons used by oh-my-
-/// posh / Starship themes) are **not** covered — Windows ships no
-/// Nerd Font by default. A follow-up can add a custom fallback builder
-/// that prepends a user-installed NF when present.
-pub fn system_font_fallback(dwrite: &IDWriteFactory) -> Option<IDWriteFontFallback> {
+fn system_font_fallback(dwrite: &IDWriteFactory) -> Option<IDWriteFontFallback> {
     let factory2: IDWriteFactory2 = match dwrite.cast() {
         Ok(f) => f,
         Err(err) => {
@@ -208,6 +206,147 @@ pub fn system_font_fallback(dwrite: &IDWriteFactory) -> Option<IDWriteFontFallba
                  glyphs will render as boxes"
             );
             None
+        }
+    }
+}
+
+/// Build the ordered fallback cascade used by terminal text formats:
+/// user-selected installed families, bundled IoskeleyMono for remaining
+/// private-use icons, then the Windows system cascade.
+pub fn font_fallback(
+    dwrite: &IDWriteFactory,
+    bundled_collection: Option<&IDWriteFontCollection>,
+    preferred_families: &[String],
+) -> Option<IDWriteFontFallback> {
+    let system_fallback = system_font_fallback(dwrite);
+    if preferred_families.is_empty() && bundled_collection.is_none() {
+        return system_fallback;
+    }
+
+    let factory2: IDWriteFactory2 = dwrite.cast().ok()?;
+    let builder = match unsafe { factory2.CreateFontFallbackBuilder() } {
+        Ok(builder) => builder,
+        Err(err) => {
+            log::warn!("CreateFontFallbackBuilder failed ({err:?}); using system fallback");
+            return system_fallback;
+        }
+    };
+    let null = PCWSTR::null();
+
+    // DirectWrite evaluates matching mappings in builder order. Put the
+    // configured families first so this really is an ordered user cascade.
+    if !preferred_families.is_empty() {
+        let mut system_collection = None;
+        if let Err(err) = unsafe { dwrite.GetSystemFontCollection(&mut system_collection, false) } {
+            log::warn!("GetSystemFontCollection for preferred fallbacks failed: {err:?}");
+        } else if let Some(collection) = system_collection {
+            for family in preferred_families {
+                let encoded = family
+                    .encode_utf16()
+                    .chain(std::iter::once(0))
+                    .collect::<Vec<_>>();
+                let mut family_index = 0;
+                let mut exists = windows::core::BOOL::default();
+                if let Err(err) = unsafe {
+                    collection.FindFamilyName(
+                        PCWSTR(encoded.as_ptr()),
+                        &mut family_index,
+                        &mut exists,
+                    )
+                } {
+                    log::warn!("failed to find preferred fallback {family:?}: {err:?}");
+                    continue;
+                }
+                if !exists.as_bool() {
+                    log::warn!("preferred fallback font is not installed: {family:?}");
+                    continue;
+                }
+                let result = (|| -> windows::core::Result<Vec<DWRITE_UNICODE_RANGE>> {
+                    let font_family = unsafe { collection.GetFontFamily(family_index)? };
+                    let font = unsafe {
+                        font_family.GetFirstMatchingFont(
+                            DWRITE_FONT_WEIGHT_NORMAL,
+                            DWRITE_FONT_STRETCH_NORMAL,
+                            DWRITE_FONT_STYLE_NORMAL,
+                        )?
+                    };
+                    let font: IDWriteFont1 = font.cast()?;
+                    let mut range_count = 0;
+                    unsafe { font.GetUnicodeRanges(None, &mut range_count)? };
+                    let mut ranges = vec![DWRITE_UNICODE_RANGE::default(); range_count as usize];
+                    unsafe { font.GetUnicodeRanges(Some(&mut ranges), &mut range_count)? };
+                    ranges.truncate(range_count as usize);
+                    Ok(ranges)
+                })();
+                let ranges = match result {
+                    Ok(ranges) if !ranges.is_empty() => ranges,
+                    Ok(_) => {
+                        log::warn!("preferred fallback font has no Unicode ranges: {family:?}");
+                        continue;
+                    }
+                    Err(err) => {
+                        log::warn!("failed to inspect preferred fallback {family:?}: {err:?}");
+                        continue;
+                    }
+                };
+                let names = [encoded.as_ptr()];
+                if let Err(err) =
+                    unsafe { builder.AddMapping(&ranges, &names, &collection, null, null, 1.0) }
+                {
+                    log::warn!("failed to add preferred fallback {family:?}: {err:?}");
+                }
+            }
+        }
+    }
+
+    // Prompt icons use Unicode private-use ranges. Append Con's bundled Nerd
+    // Font after the user's choices, but before the Windows system cascade.
+    if let Some(collection) = bundled_collection {
+        let ranges = [
+            DWRITE_UNICODE_RANGE {
+                first: 0xE000,
+                last: 0xF8FF,
+            },
+            DWRITE_UNICODE_RANGE {
+                first: 0xF0000,
+                last: 0xFFFFD,
+            },
+            DWRITE_UNICODE_RANGE {
+                first: 0x100000,
+                last: 0x10FFFD,
+            },
+        ];
+        let family: Vec<u16> = BUNDLED_FONT_FAMILY
+            .encode_utf16()
+            .chain(std::iter::once(0))
+            .collect();
+        let names = [family.as_ptr()];
+        if let Err(err) =
+            unsafe { builder.AddMapping(&ranges, &names, collection, null, null, 1.0) }
+        {
+            log::warn!("failed to add bundled PUA fallback mapping: {err:?}");
+        }
+    }
+
+    if let Some(system_fallback) = system_fallback.as_ref()
+        && let Err(err) = unsafe { builder.AddMappings(system_fallback) }
+    {
+        log::warn!("failed to append system font fallback: {err:?}");
+    }
+
+    match unsafe { builder.CreateFontFallback() } {
+        Ok(fallback) => {
+            log::info!(
+                "font fallback cascade ready: preferred={:?}, bundled_pua={}, system={}",
+                preferred_families,
+                bundled_collection.is_some(),
+                system_fallback.is_some()
+            );
+            Some(fallback)
+        }
+        Err(err) => {
+            log::warn!("CreateFontFallback failed ({err:?}); using system fallback");
+            system_fallback
         }
     }
 }

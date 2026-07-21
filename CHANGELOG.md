@@ -6,6 +6,14 @@ con is still pre-release, so entries may group related beta work while the produ
 
 ## `v0.1.0-beta.79` - unreleased
 
+### Added
+
+**Appearance**
+
+- Added an ordered terminal font fallback editor in Settings. Preferred CJK,
+  emoji, and symbol fonts now update open panes immediately, followed by Con's
+  bundled Nerd Font and the operating-system fallback cascade.
+
 ### Changed
 
 **Agent**

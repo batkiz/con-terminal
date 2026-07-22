@@ -205,6 +205,7 @@ pub struct SettingsPanel {
     terminal_font_select: Entity<SelectState<SearchableVec<String>>>,
     terminal_fallback_select: Entity<SelectState<SearchableVec<String>>>,
     terminal_font_families: Vec<String>,
+    shell_input: Entity<InputState>,
     ui_font_select: Entity<SelectState<SearchableVec<String>>>,
     cursor_style_select: Entity<SelectState<Vec<String>>>,
     font_size_input: Entity<InputState>,
@@ -1361,6 +1362,24 @@ impl SettingsPanel {
             window,
             cx,
         );
+        let shell_input = cx.new(|cx| {
+            let mut s = InputState::new(window, cx);
+            s.set_placeholder(
+                if cfg!(target_os = "windows") {
+                    "Auto (Windows Terminal default)"
+                } else {
+                    "Auto ($SHELL)"
+                },
+                window,
+                cx,
+            );
+            s.set_value(
+                &config.terminal.shell.clone().unwrap_or_default(),
+                window,
+                cx,
+            );
+            s
+        });
         let font_size_input = cx.new(|cx| {
             let mut s = InputState::new(window, cx);
             s.set_placeholder("14.0", window, cx);
@@ -1710,6 +1729,7 @@ impl SettingsPanel {
             terminal_font_select,
             terminal_fallback_select,
             terminal_font_families,
+            shell_input,
             ui_font_select,
             cursor_style_select,
             font_size_input,
@@ -1869,6 +1889,13 @@ impl SettingsPanel {
             );
         });
         self.sync_terminal_fallback_select(window, cx);
+        self.shell_input.update(cx, |s, cx| {
+            s.set_value(
+                &self.config.terminal.shell.clone().unwrap_or_default(),
+                window,
+                cx,
+            )
+        });
         self.ui_font_select.update(cx, |select, cx| {
             select.set_selected_value(&self.config.appearance.ui_font_family, window, cx);
         });
@@ -2543,6 +2570,7 @@ impl SettingsPanel {
             .cloned()
             .unwrap_or_default();
         let font_size_text = self.font_size_input.read(cx).value().to_string();
+        let shell_text = self.shell_input.read(cx).value().trim().to_string();
         let ui_font_size_text = self.ui_font_size_input.read(cx).value().trim().to_string();
 
         // Save current provider's per-provider fields into the map
@@ -2576,6 +2604,7 @@ impl SettingsPanel {
             &self.config.terminal.font_family,
         );
         self.config.terminal.font_size = font_size_text.parse().unwrap_or(14.0);
+        self.config.terminal.shell = (!shell_text.is_empty()).then_some(shell_text);
         let parsed_ui_font_size = if ui_font_size_text.is_empty() {
             Some(self.config.appearance.ui_font_size)
         } else {
@@ -3960,6 +3989,20 @@ impl SettingsPanel {
                         .child(row_separator(theme))
                         .child(row_field("Terminal Size", &font_size_input)),
                 ),
+        );
+
+        content = content.child(
+            div()
+                .flex()
+                .flex_col()
+                .gap(px(8.0))
+                .child(group_label("Shell", &theme))
+                .child(card(theme, card_opacity).child(row_input_with_hint(
+                    "Default Shell",
+                    "Command used by new terminal panes after restarting Con. Leave blank for automatic detection.",
+                    &self.shell_input,
+                    theme,
+                ))),
         );
 
         content = content.child(
@@ -6609,6 +6652,48 @@ fn row_field(label: &str, input: &Entity<InputState>) -> Div {
                 .child(label.to_string()),
         )
         .child(div().flex_1().min_w(px(160.0)).child(Input::new(input)))
+}
+
+fn row_input_with_hint(
+    label: &str,
+    hint: &str,
+    input: &Entity<InputState>,
+    theme: &gpui_component::Theme,
+) -> Div {
+    div()
+        .flex()
+        .items_center()
+        .justify_between()
+        .gap(px(18.0))
+        .px(px(16.0))
+        .py(px(10.0))
+        .child(
+            div()
+                .flex()
+                .flex_col()
+                .gap(px(3.0))
+                .flex_1()
+                .min_w_0()
+                .child(
+                    div()
+                        .text_sm()
+                        .font_weight(FontWeight::MEDIUM)
+                        .child(label.to_string()),
+                )
+                .child(
+                    div()
+                        .text_xs()
+                        .text_color(theme.muted_foreground)
+                        .child(hint.to_string()),
+                ),
+        )
+        .child(
+            div()
+                .flex_1()
+                .min_w(px(180.0))
+                .max_w(px(320.0))
+                .child(Input::new(input)),
+        )
 }
 
 fn slider_row(

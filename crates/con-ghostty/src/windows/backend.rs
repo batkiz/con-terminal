@@ -36,12 +36,14 @@ pub struct WindowsGhosttyApp {
     clipboard_write_enabled: AtomicBool,
     clipboard_write_policy: Arc<ClipboardWritePolicy>,
     desktop_notification_policy: Arc<DesktopNotificationPolicy>,
+    shell: Option<String>,
 }
 
 impl WindowsGhosttyApp {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         colors: Option<&TerminalColors>,
+        shell: Option<&str>,
         font_family: Option<&str>,
         font_fallback: Option<&[String]>,
         font_size: Option<f32>,
@@ -83,6 +85,7 @@ impl WindowsGhosttyApp {
             clipboard_write_enabled: AtomicBool::new(clipboard_write_enabled),
             clipboard_write_policy: clipboard_write_policy(clipboard_write_enabled),
             desktop_notification_policy: desktop_notification_policy(),
+            shell: shell.map(ToOwned::to_owned),
         })
     }
 
@@ -159,6 +162,12 @@ impl WindowsGhosttyApp {
     /// when constructing a new `RenderSession`.
     pub fn renderer_config(&self) -> RendererConfig {
         self.config.lock().clone()
+    }
+
+    /// Command used for new ConPTY sessions. An unset value preserves the
+    /// platform auto-detection performed by `default_shell_command`.
+    pub fn shell_command(&self) -> String {
+        super::conpty::shell_command(self.shell.as_deref())
     }
 }
 

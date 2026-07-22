@@ -70,6 +70,7 @@ impl LinuxGhosttyApp {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         colors: Option<&TerminalColors>,
+        shell: Option<&str>,
         font_family: Option<&str>,
         font_fallback: Option<&[String]>,
         font_size: Option<f32>,
@@ -85,7 +86,11 @@ impl LinuxGhosttyApp {
     ) -> Result<Self, String> {
         Ok(Self {
             config: Mutex::new(LinuxBackendConfig {
-                shell_program: default_linux_shell_program(),
+                shell_program: shell
+                    .map(str::trim)
+                    .filter(|shell| !shell.is_empty())
+                    .map(ToOwned::to_owned)
+                    .or_else(default_linux_shell_program),
                 font_family: font_family.map(ToOwned::to_owned),
                 font_fallback: font_fallback.unwrap_or_default().to_vec(),
                 font_size,

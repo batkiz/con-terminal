@@ -10,10 +10,12 @@
 //! pipeline.
 
 use std::collections::HashMap;
+use std::sync::LazyLock;
 
 use anyhow::{Context, Result};
 use etagere::{AllocId, AtlasAllocator, size2};
 use unicode_width::UnicodeWidthChar;
+use windows::Win32::Globalization::GetUserDefaultLocaleName;
 use windows::Win32::Graphics::Direct2D::Common::{
     D2D_RECT_F, D2D1_ALPHA_MODE_IGNORE, D2D1_COLOR_F, D2D1_PIXEL_FORMAT,
 };
@@ -46,6 +48,31 @@ use windows_numerics::Matrix3x2;
 
 const TEXT_ENHANCED_CONTRAST: f32 = 1.15;
 const CJK_TEXT_ENHANCED_CONTRAST: f32 = 1.45;
+
+const LOCALE_NAME_BUFFER_LENGTH: usize = 85;
+const FALLBACK_LOCALE_NAME: &str = "en-US";
+
+static USER_LOCALE_NAME: LazyLock<Vec<u16>> = LazyLock::new(user_locale_name);
+
+fn user_locale_name() -> Vec<u16> {
+    // LOCALE_NAME_MAX_LENGTH is 85 UTF-16 code units including the terminator.
+    let mut locale = vec![0; LOCALE_NAME_BUFFER_LENGTH];
+    let length = unsafe { GetUserDefaultLocaleName(&mut locale) };
+    if length > 1 && (length as usize) <= locale.len() {
+        locale.truncate(length as usize);
+        log::info!(
+            "DirectWrite user locale: {}",
+            String::from_utf16_lossy(&locale[..locale.len() - 1])
+        );
+        return locale;
+    }
+
+    log::warn!("GetUserDefaultLocaleName failed; using DirectWrite locale {FALLBACK_LOCALE_NAME}");
+    FALLBACK_LOCALE_NAME
+        .encode_utf16()
+        .chain(std::iter::once(0))
+        .collect()
+}
 
 #[derive(Debug, Clone, Copy)]
 #[allow(dead_code)] // offset_x/offset_y are wired in Phase 3b-2 (glyph bearing).
@@ -1029,7 +1056,7 @@ fn make_text_format_with_weight(
     italic: bool,
 ) -> Result<IDWriteTextFormat> {
     let family_w: Vec<u16> = family.encode_utf16().chain(std::iter::once(0)).collect();
-    let locale_w: Vec<u16> = "en-us".encode_utf16().chain(std::iter::once(0)).collect();
+    let locale_w = &*USER_LOCALE_NAME;
 
     let style = if italic {
         DWRITE_FONT_STYLE_ITALIC

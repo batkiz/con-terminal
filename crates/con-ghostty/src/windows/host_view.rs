@@ -140,6 +140,7 @@ impl RenderSession {
         height_px: u32,
         dpi: u32,
         config: RendererConfig,
+        shell: String,
         cwd: Option<PathBuf>,
         initial_output: Option<Vec<u8>>,
         wake: W,
@@ -184,7 +185,6 @@ impl RenderSession {
         let vt_for_pty = vt.clone();
         let transcript_for_pty = transcript.clone();
         let wake_for_pty: Arc<dyn Fn() + Send + Sync> = Arc::new(wake);
-        let shell = super::conpty::default_shell_command();
         let shell_cwd = resolve_shell_cwd(cwd);
         log::info!("RenderSession: spawning ConPTY shell={shell} cwd={shell_cwd:?}");
         let conpty = ConPty::spawn(

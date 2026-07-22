@@ -528,14 +528,25 @@ where
 
 /// Discover a sensible default shell.
 ///
-/// Users who want to force a different shell can point us at it via
-/// `CON_SHELL` (future: a config-file field). Otherwise we try to honor
-/// Windows Terminal's configured default profile before falling back to a
-/// simple executable search. Matching the user's Windows Terminal shell is
-/// important when comparing prompt latency: PowerShell profile scripts,
-/// prompt frameworks, and WSL startup can dominate the first 400-500ms.
+/// Without an explicit `[terminal].shell`, users can still force a shell via
+/// `CON_SHELL`. Otherwise we honor Windows Terminal's configured default
+/// profile before falling back to a simple executable search. Matching the
+/// user's Windows Terminal shell matters because PowerShell profiles, prompt
+/// frameworks, and WSL startup can dominate initial latency.
 pub fn default_shell_command() -> String {
-    let command = if let Some(cmd) = std::env::var("CON_SHELL")
+    shell_command(None)
+}
+
+/// Resolve the shell command for a new pane. Explicit config wins over the
+/// compatibility environment override and platform auto-detection.
+pub fn shell_command(configured: Option<&str>) -> String {
+    let command = if let Some(cmd) = configured
+        .map(str::trim)
+        .filter(|cmd| !cmd.is_empty())
+        .map(ToOwned::to_owned)
+    {
+        cmd
+    } else if let Some(cmd) = std::env::var("CON_SHELL")
         .ok()
         .filter(|s| !s.trim().is_empty())
     {
@@ -1018,6 +1029,11 @@ fn strip_jsonc_trailing_commas(input: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn configured_shell_command_wins_without_changing_non_powershell_commands() {
+        assert_eq!(shell_command(Some("  cmd.exe /q  ")), "cmd.exe /q");
+    }
 
     #[test]
     fn reads_windows_terminal_default_profile_commandline() {

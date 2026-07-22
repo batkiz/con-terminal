@@ -70,6 +70,7 @@ impl TerminalColors {
 #[derive(Debug, Clone, Default)]
 pub struct GhosttyConfigPatch {
     pub colors: Option<TerminalColors>,
+    pub shell: Option<String>,
     pub font_family: Option<String>,
     pub font_fallback: Option<Vec<String>>,
     pub font_size: Option<f32>,
@@ -88,6 +89,9 @@ impl GhosttyConfigPatch {
     fn merge(&mut self, patch: &GhosttyConfigPatch) {
         if let Some(colors) = &patch.colors {
             self.colors = Some(colors.clone());
+        }
+        if let Some(shell) = &patch.shell {
+            self.shell = Some(shell.clone());
         }
         if let Some(font_family) = &patch.font_family {
             self.font_family = Some(font_family.clone());
@@ -131,6 +135,9 @@ impl GhosttyConfigPatch {
         let mut s = String::with_capacity(512);
         if let Some(colors) = &self.colors {
             colors.append_config(&mut s);
+        }
+        if let Some(shell) = &self.shell {
+            s.push_str(&format!("command = {:?}\n", shell));
         }
         if let Some(font_family) = &self.font_family {
             let font_family = sanitize_font_family_for_ghostty(font_family);
@@ -486,6 +493,7 @@ impl GhosttyApp {
     /// Create a new ghostty app with the given terminal colors.
     pub fn new(
         colors: Option<&TerminalColors>,
+        shell: Option<&str>,
         font_family: Option<&str>,
         font_fallback: Option<&[String]>,
         font_size: Option<f32>,
@@ -502,6 +510,7 @@ impl GhosttyApp {
 
         let appearance = GhosttyConfigPatch {
             colors: colors.cloned(),
+            shell: shell.map(ToOwned::to_owned),
             font_family: font_family.map(ToOwned::to_owned),
             font_fallback: font_fallback.map(ToOwned::to_owned),
             font_size,
@@ -1781,6 +1790,20 @@ mod tests {
         let config = patch.to_config_string();
         assert!(config.contains("font-family = \"Ioskeley Mono\""));
         assert!(!config.contains(".ZedMono"));
+    }
+
+    #[test]
+    fn ghostty_config_includes_configured_shell_command() {
+        let patch = GhosttyConfigPatch {
+            shell: Some("/opt/homebrew/bin/fish -l".to_string()),
+            ..Default::default()
+        };
+
+        assert!(
+            patch
+                .to_config_string()
+                .contains("command = \"/opt/homebrew/bin/fish -l\"")
+        );
     }
 
     #[test]

@@ -340,11 +340,13 @@ impl ConWorkspace {
                                         theme.foreground.opacity(0.045)
                                     })
                                 })
-                                .child(svg().path(icon).size(px(12.0)).text_color(if active {
-                                    theme.primary.opacity(0.88)
-                                } else {
-                                    theme.muted_foreground.opacity(0.48)
-                                }))
+                                .child(svg().path(icon).size(mono_icon_px(theme, 12.0)).text_color(
+                                    if active {
+                                        theme.primary.opacity(0.88)
+                                    } else {
+                                        theme.muted_foreground.opacity(0.48)
+                                    },
+                                ))
                                 .child(
                                     div()
                                         .text_size(px(10.8))

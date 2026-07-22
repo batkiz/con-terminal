@@ -22,6 +22,7 @@
 //! system font (Segoe / Consolas). We log a warning in that case.
 
 use anyhow::{Context, Result};
+use windows::Win32::Foundation::ERROR_INSUFFICIENT_BUFFER;
 use windows::Win32::Graphics::DirectWrite::{
     DWRITE_FONT_STRETCH_NORMAL, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_WEIGHT_NORMAL,
     DWRITE_UNICODE_RANGE, IDWriteFactory, IDWriteFactory2, IDWriteFactory5, IDWriteFont1,
@@ -271,12 +272,7 @@ pub fn font_fallback(
                         )?
                     };
                     let font: IDWriteFont1 = font.cast()?;
-                    let mut range_count = 0;
-                    unsafe { font.GetUnicodeRanges(None, &mut range_count)? };
-                    let mut ranges = vec![DWRITE_UNICODE_RANGE::default(); range_count as usize];
-                    unsafe { font.GetUnicodeRanges(Some(&mut ranges), &mut range_count)? };
-                    ranges.truncate(range_count as usize);
-                    Ok(ranges)
+                    unicode_ranges_for_font(&font)
                 })();
                 let ranges = match result {
                     Ok(ranges) if !ranges.is_empty() => ranges,
@@ -348,5 +344,75 @@ pub fn font_fallback(
             log::warn!("CreateFontFallback failed ({err:?}); using system fallback");
             system_fallback
         }
+    }
+}
+
+fn unicode_ranges_for_font(
+    font: &IDWriteFont1,
+) -> windows::core::Result<Vec<DWRITE_UNICODE_RANGE>> {
+    query_unicode_ranges(|ranges, count| unsafe { font.GetUnicodeRanges(ranges, count) })
+}
+
+/// Execute DirectWrite's two-call Unicode-range query.
+///
+/// The sizing call deliberately supplies no buffer. For any font with at
+/// least one range, DirectWrite reports the required count and returns
+/// `E_NOT_SUFFICIENT_BUFFER`; that HRESULT is part of the successful sizing
+/// contract rather than a reason to discard the preferred fallback.
+fn query_unicode_ranges(
+    mut get_ranges: impl FnMut(
+        Option<&mut [DWRITE_UNICODE_RANGE]>,
+        &mut u32,
+    ) -> windows::core::Result<()>,
+) -> windows::core::Result<Vec<DWRITE_UNICODE_RANGE>> {
+    let mut range_count = 0;
+    if let Err(err) = get_ranges(None, &mut range_count)
+        && err.code() != ERROR_INSUFFICIENT_BUFFER.to_hresult()
+    {
+        return Err(err);
+    }
+    if range_count == 0 {
+        return Ok(Vec::new());
+    }
+
+    let mut ranges = vec![DWRITE_UNICODE_RANGE::default(); range_count as usize];
+    get_ranges(Some(&mut ranges), &mut range_count)?;
+    ranges.truncate(range_count as usize);
+    Ok(ranges)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{DWRITE_UNICODE_RANGE, query_unicode_ranges};
+    use windows::Win32::Foundation::ERROR_INSUFFICIENT_BUFFER;
+
+    #[test]
+    fn unicode_range_query_treats_sizing_error_as_expected() {
+        let expected = [
+            DWRITE_UNICODE_RANGE {
+                first: 0x4E00,
+                last: 0x9FFF,
+            },
+            DWRITE_UNICODE_RANGE {
+                first: 0xE000,
+                last: 0xF8FF,
+            },
+        ];
+        let mut calls = 0;
+        let ranges = query_unicode_ranges(|buffer, actual_count| {
+            calls += 1;
+            *actual_count = expected.len() as u32;
+            let Some(buffer) = buffer else {
+                return Err(ERROR_INSUFFICIENT_BUFFER.to_hresult().into());
+            };
+            buffer.copy_from_slice(&expected);
+            Ok(())
+        })
+        .expect("the expected sizing HRESULT should not abort the query");
+
+        assert_eq!(calls, 2);
+        assert_eq!(ranges.len(), expected.len());
+        assert_eq!(ranges[0].first, 0x4E00);
+        assert_eq!(ranges[1].last, 0xF8FF);
     }
 }

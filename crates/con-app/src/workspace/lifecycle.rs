@@ -71,6 +71,7 @@ impl ConWorkspace {
         let colors = theme_to_ghostty_colors(&terminal_theme);
         let ghostty_app = con_ghostty::GhosttyApp::new(
             Some(&colors),
+            config.terminal.shell.as_deref(),
             Some(&terminal_font_family),
             Some(font_size),
             Some(terminal_opacity),

@@ -31,6 +31,7 @@ pub struct TerminalColors {
 #[derive(Debug, Clone, Default)]
 pub struct GhosttyConfigPatch {
     pub colors: Option<TerminalColors>,
+    pub shell: Option<String>,
     pub font_family: Option<String>,
     pub font_size: Option<f32>,
     pub background_opacity: Option<f32>,
@@ -110,6 +111,7 @@ impl GhosttyApp {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         _colors: Option<&TerminalColors>,
+        _shell: Option<&str>,
         _font_family: Option<&str>,
         _font_size: Option<f32>,
         _background_opacity: Option<f32>,

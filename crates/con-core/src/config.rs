@@ -79,6 +79,10 @@ pub fn sanitize_terminal_font_family(name: &str) -> String {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct TerminalConfig {
+    /// Shell command used for newly created terminal panes. When unset, Con
+    /// follows the platform default (for example the Windows Terminal default
+    /// profile or `$SHELL` on Unix).
+    pub shell: Option<String>,
     pub font_family: String,
     pub font_size: f32,
     pub theme: String,
@@ -89,6 +93,7 @@ pub struct TerminalConfig {
 impl Default for TerminalConfig {
     fn default() -> Self {
         Self {
+            shell: None,
             font_family: default_font_family(),
             font_size: default_font_size(),
             theme: default_theme(),
@@ -1012,6 +1017,12 @@ impl SkillsConfig {
 
 impl Config {
     pub fn normalize(&mut self) {
+        self.terminal.shell = self
+            .terminal
+            .shell
+            .take()
+            .map(|shell| shell.trim().to_string())
+            .filter(|shell| !shell.is_empty());
         self.appearance.normalize();
         self.keybindings.normalize();
     }
@@ -1243,6 +1254,26 @@ mod tests {
             sanitize_terminal_font_family("JetBrains Mono"),
             "JetBrains Mono"
         );
+    }
+
+    #[test]
+    fn terminal_shell_trims_and_empty_values_restore_platform_default() {
+        let mut configured: Config = toml::from_str(
+            r#"
+[terminal]
+shell = "  pwsh.exe -NoLogo  "
+"#,
+        )
+        .unwrap();
+        configured.normalize();
+        assert_eq!(
+            configured.terminal.shell.as_deref(),
+            Some("pwsh.exe -NoLogo")
+        );
+
+        configured.terminal.shell = Some("   ".to_string());
+        configured.normalize();
+        assert!(configured.terminal.shell.is_none());
     }
 
     #[test]

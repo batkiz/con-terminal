@@ -4,6 +4,7 @@ use gpui_component::scroll::ScrollableElement;
 use gpui_component::{ActiveTheme, input::Input};
 
 use crate::motion::{MotionValue, vertical_reveal_offset};
+use crate::ui_scale::ui_icon_px;
 
 actions!(command_palette, [ToggleCommandPalette]);
 
@@ -643,7 +644,7 @@ impl Render for CommandPalette {
                         .child(
                             svg()
                                 .path("phosphor/magnifying-glass.svg")
-                                .size(px(15.0))
+                                .size(ui_icon_px(theme, 15.0))
                                 .flex_shrink_0()
                                 .text_color(theme.muted_foreground.opacity(0.72)),
                         )

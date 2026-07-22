@@ -24,7 +24,7 @@ use gpui_component::{ActiveTheme, Disableable, Icon, IndexPath, Sizable as _, in
 
 use crate::model_registry::ModelRegistry;
 use crate::motion::{MotionValue, vertical_reveal_offset};
-use crate::ui_scale::ui_density_scale;
+use crate::ui_scale::{ui_density_scale, ui_icon_px};
 use std::collections::HashMap;
 use std::sync::Arc;
 use url::Url;
@@ -3452,7 +3452,7 @@ impl SettingsPanel {
                             .child(
                                 svg()
                                     .path("phosphor/x.svg")
-                                    .size(px(10.0))
+                                    .size(ui_icon_px(theme, 10.0))
                                     .text_color(muted),
                             ),
                     )
@@ -3503,7 +3503,7 @@ impl SettingsPanel {
                     .child(
                         svg()
                             .path("phosphor/plus.svg")
-                            .size(px(10.0))
+                            .size(ui_icon_px(theme, 10.0))
                             .text_color(muted_fg),
                     )
                     .child(div().text_size(px(10.0)).child(label))
@@ -4196,7 +4196,7 @@ impl SettingsPanel {
                             .child(
                                 svg()
                                     .path("phosphor/folder.svg")
-                                    .size(px(12.0))
+                                    .size(ui_icon_px(theme, 12.0))
                                     .text_color(theme.muted_foreground.opacity(0.5)),
                             )
                             .child(
@@ -4365,7 +4365,7 @@ impl SettingsPanel {
                         Some(
                             svg()
                                 .path("phosphor/check.svg")
-                                .size(px(10.0))
+                                .size(ui_icon_px(theme, 10.0))
                                 .text_color(theme.primary),
                         )
                     } else {
@@ -4639,7 +4639,12 @@ impl SettingsPanel {
                             } else {
                                 theme.transparent
                             })
-                            .child(svg().path(icon_path).size(px(13.0)).text_color(icon_color)),
+                            .child(
+                                svg()
+                                    .path(icon_path)
+                                    .size(ui_icon_px(theme, 13.0))
+                                    .text_color(icon_color),
+                            ),
                     )
                     .child(
                         div()
@@ -5750,7 +5755,7 @@ impl Render for SettingsPanel {
                 nav_item = nav_item.justify_center().size(px(36.0)).mx_auto().child(
                     svg()
                         .path(section.icon())
-                        .size(px(16.0))
+                        .size(ui_icon_px(theme, 16.0))
                         .text_color(if is_active {
                             theme.foreground
                         } else {
@@ -5765,7 +5770,7 @@ impl Render for SettingsPanel {
                     .child(
                         svg()
                             .path(section.icon())
-                            .size(px(15.0))
+                            .size(ui_icon_px(theme, 15.0))
                             .text_color(if is_active {
                                 theme.foreground
                             } else {
@@ -5942,7 +5947,7 @@ impl Render for SettingsPanel {
                                             .child(
                                                 svg()
                                                     .path(icon)
-                                                    .size(px(12.0))
+                                                    .size(ui_icon_px(theme, 12.0))
                                                     .text_color(tone),
                                             )
                                             .child(
@@ -5967,7 +5972,7 @@ impl Render for SettingsPanel {
                                             .child(
                                                 svg()
                                                     .path("phosphor/file-text.svg")
-                                                    .size(px(15.0 * header_density))
+                                                    .size(ui_icon_px(theme, 15.0))
                                                     .text_color(config_button_tone),
                                             )
                                             .on_click(|_, _, cx| {
@@ -6004,7 +6009,7 @@ impl Render for SettingsPanel {
                                             .child(
                                                 svg()
                                                     .path("phosphor/check.svg")
-                                                    .size(px(12.0 * header_density))
+                                                    .size(ui_icon_px(theme, 12.0))
                                                     .text_color(save_button_tint),
                                             )
                                             .child(
@@ -6049,7 +6054,7 @@ impl Render for SettingsPanel {
                                     .child(
                                         svg()
                                             .path("phosphor/warning.svg")
-                                            .size(px(14.0))
+                                            .size(ui_icon_px(theme, 14.0))
                                             .text_color(theme.warning.opacity(if theme.is_dark() {
                                                 0.96
                                             } else {
@@ -6110,7 +6115,7 @@ impl Render for SettingsPanel {
                                             .child(
                                                 svg()
                                                     .path("phosphor/check.svg")
-                                                    .size(px(12.0 * header_density))
+                                                    .size(ui_icon_px(theme, 12.0))
                                                     .text_color(save_button_tint),
                                             )
                                             .child(

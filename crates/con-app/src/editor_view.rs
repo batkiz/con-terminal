@@ -27,6 +27,8 @@ use std::{
     time::Duration,
 };
 
+use crate::ui_scale::ui_icon_px;
+
 const EDITOR_FONT_SIZE: f32 = 14.0;
 #[cfg_attr(not(test), allow(dead_code))]
 const LINE_HEIGHT: f32 = EDITOR_FONT_SIZE * 1.5;
@@ -1271,7 +1273,7 @@ impl Render for EditorView {
                     .child(
                         svg()
                             .path("phosphor/x.svg")
-                            .size(px(8.0))
+                            .size(ui_icon_px(&theme, 9.0))
                             .text_color(fg.opacity(if is_active { 0.55 } else { 0.42 })),
                     ),
             );

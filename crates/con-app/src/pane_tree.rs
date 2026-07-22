@@ -11,6 +11,7 @@ use gpui_component::{
 use crate::editor_view::EditorView;
 use crate::sidebar::{DraggedTab, DraggedTabOrigin};
 use crate::terminal_pane::TerminalPane;
+use crate::ui_scale::mono_icon_px;
 
 const RESTORED_SCREEN_TEXT_MAX_LINES: usize = 600;
 const RESTORED_SCREEN_TEXT_MAX_BYTES: usize = 128 * 1024;
@@ -2229,7 +2230,12 @@ impl PaneTree {
                 window.prevent_default();
                 cx.stop_propagation();
             })
-            .child(svg().path(zoom_icon).size(px(11.0)).text_color(btn_color));
+            .child(
+                svg()
+                    .path(zoom_icon)
+                    .size(mono_icon_px(theme, 12.0))
+                    .text_color(btn_color),
+            );
 
         // ✕ close button — only when there are splits
         let close_btn = if has_splits {
@@ -2254,7 +2260,7 @@ impl PaneTree {
                     .child(
                         svg()
                             .path("phosphor/x.svg")
-                            .size(px(11.0))
+                            .size(mono_icon_px(theme, 12.0))
                             .text_color(btn_color),
                     ),
             )
@@ -2517,7 +2523,7 @@ impl PaneTree {
                     .child(
                         svg()
                             .path("phosphor/stack.svg")
-                            .size(px(9.0))
+                            .size(mono_icon_px(theme, 9.0))
                             .text_color(rail_text.opacity(0.82)),
                     )
                     .child(SharedString::from(rail_label)),
@@ -2592,7 +2598,7 @@ impl PaneTree {
                     .child(
                         svg()
                             .path("phosphor/terminal.svg")
-                            .size(px(10.0))
+                            .size(mono_icon_px(theme, 10.0))
                             .flex_shrink_0()
                             .text_color(icon_color),
                     )
@@ -2650,13 +2656,16 @@ impl PaneTree {
                                 window.prevent_default();
                                 cx.stop_propagation();
                             })
-                            .child(svg().path("phosphor/x.svg").size(px(8.0)).text_color(
-                                if is_active {
-                                    theme.foreground.opacity(0.62)
-                                } else {
-                                    theme.foreground.opacity(0.52)
-                                },
-                            )),
+                            .child(
+                                svg()
+                                    .path("phosphor/x.svg")
+                                    .size(mono_icon_px(theme, 9.0))
+                                    .text_color(if is_active {
+                                        theme.foreground.opacity(0.62)
+                                    } else {
+                                        theme.foreground.opacity(0.52)
+                                    }),
+                            ),
                     );
                 }
 

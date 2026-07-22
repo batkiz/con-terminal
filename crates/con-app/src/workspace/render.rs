@@ -1321,7 +1321,7 @@ impl Render for ConWorkspace {
                     .child(
                         svg()
                             .path(preview.icon)
-                            .size(px(12.0))
+                            .size(ui_icon_px(theme, 12.0))
                             .flex_shrink_0()
                             .text_color(theme.foreground),
                     )

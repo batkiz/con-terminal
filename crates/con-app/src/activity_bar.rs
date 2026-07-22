@@ -19,6 +19,8 @@ use gpui_component::{
     button::{Button, ButtonVariants as _},
 };
 
+use crate::ui_scale::ui_icon_px;
+
 pub const ACTIVITY_BAR_HEADER_HEIGHT: f32 = 32.0;
 
 /// The content slot currently shown in the left panel.
@@ -198,7 +200,12 @@ where
         .cursor_pointer()
         .occlude()
         .on_click(handler)
-        .child(svg().path(icon).size(px(12.5)).text_color(icon_color))
+        .child(
+            svg()
+                .path(icon)
+                .size(ui_icon_px(theme, 12.5))
+                .text_color(icon_color),
+        )
         .child(
             div()
                 .text_size(px(11.0))

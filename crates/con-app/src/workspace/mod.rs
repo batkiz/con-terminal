@@ -64,6 +64,7 @@ use crate::sidebar::{
 use crate::sidebar_search_view::SidebarSearchView;
 use crate::terminal_pane::{TerminalPane, subscribe_terminal_pane};
 use con_ghostty::TerminalProgress;
+use crate::ui_scale::{mono_icon_px, ui_icon_px};
 use con_terminal::TerminalTheme;
 
 #[cfg(any(target_os = "windows", target_os = "linux"))]

@@ -36,7 +36,7 @@ use crate::chat_markdown::{
 use crate::input_bar::SkillEntry;
 use crate::motion::{MotionValue, vertical_reveal_offset};
 use crate::settings_panel::provider_label;
-use crate::ui_scale::{mono_px, mono_space_px, ui_px, ui_space_px};
+use crate::ui_scale::{mono_icon_px, mono_px, mono_space_px, ui_icon_px, ui_px, ui_space_px};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum AgentStatus {
@@ -3151,7 +3151,7 @@ fn render_assistant_message(
     let mut header_row = div().flex().items_center().gap(px(6.0)).pb(px(3.0)).child(
         svg()
             .path("phosphor/oven-duotone.svg")
-            .size(px(13.0))
+            .size(ui_icon_px(theme, 13.0))
             .text_color(theme.primary.opacity(0.65)),
     );
     header_row = header_row.child(render_model_chips(msg_model, msg_duration_ms, theme));
@@ -3199,13 +3199,13 @@ fn render_assistant_message(
                 .child(
                     svg()
                         .path(chevron)
-                        .size(px(10.0))
+                        .size(ui_icon_px(theme, 10.0))
                         .text_color(theme.muted_foreground.opacity(0.3)),
                 )
                 .child(
                     svg()
                         .path("phosphor/brain-duotone.svg")
-                        .size(px(11.0))
+                        .size(ui_icon_px(theme, 11.0))
                         .text_color(theme.primary.opacity(0.42)),
                 )
                 .child(
@@ -3986,7 +3986,7 @@ impl AgentPanel {
                                         .child(
                                             svg()
                                                 .path("phosphor/pencil-simple.svg")
-                                                .size(px(13.0))
+                                                .size(ui_icon_px(theme, 13.0))
                                                 .text_color(theme.muted_foreground.opacity(0.4)),
                                         )
                                 })
@@ -4014,7 +4014,7 @@ impl AgentPanel {
                                         .child(
                                             svg()
                                                 .path("phosphor/arrow-clockwise.svg")
-                                                .size(px(13.0))
+                                                .size(ui_icon_px(theme, 13.0))
                                                 .text_color(theme.muted_foreground.opacity(0.4)),
                                         )
                                 }),
@@ -4343,7 +4343,7 @@ impl Render for AgentPanel {
                                             .child(
                                                 svg()
                                                     .path(icon)
-                                                    .size(px(13.0))
+                                                    .size(ui_icon_px(theme, 13.0))
                                                     .flex_shrink_0()
                                                     .text_color(theme.warning.opacity(0.70)),
                                             )
@@ -4465,7 +4465,7 @@ impl Render for AgentPanel {
             .child(
                 svg()
                     .path("phosphor/oven-duotone.svg")
-                    .size(px(14.0))
+                    .size(ui_icon_px(theme, 14.0))
                     .text_color(theme.primary),
             )
             .child(status_indicator);
@@ -4571,7 +4571,7 @@ impl Render for AgentPanel {
                             .child(
                                 svg()
                                     .path(provider_icon_path)
-                                    .size(px(12.0))
+                                    .size(mono_icon_px(theme, 12.0))
                                     .text_color(theme.foreground.opacity(0.82)),
                             ),
                     )
@@ -5007,7 +5007,7 @@ impl Render for AgentPanel {
                                 .child(
                                     svg()
                                         .path("phosphor/arrow-line-down.svg")
-                                        .size(px(10.0))
+                                        .size(ui_icon_px(theme, 10.0))
                                         .flex_shrink_0()
                                         .text_color(theme.muted_foreground.opacity(0.8)),
                                 ),

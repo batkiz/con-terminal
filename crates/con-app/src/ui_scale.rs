@@ -7,6 +7,9 @@ const DEFAULT_MONO_FONT_SIZE: f32 = 13.0;
 const MIN_DENSITY_SCALE: f32 = 0.92;
 const MAX_DENSITY_SCALE: f32 = 1.25;
 const DENSITY_SCALE_WEIGHT: f32 = 0.45;
+const MIN_ICON_SCALE: f32 = 0.90;
+const MAX_ICON_SCALE: f32 = 1.35;
+const ICON_SCALE_WEIGHT: f32 = 0.75;
 
 pub(crate) fn ui_font_scale(theme: &Theme) -> f32 {
     font_scale(
@@ -32,6 +35,14 @@ pub(crate) fn ui_density_scale(theme: &Theme) -> f32 {
 
 pub(crate) fn mono_density_scale(theme: &Theme) -> f32 {
     density_scale(mono_font_scale(theme))
+}
+
+pub(crate) fn ui_icon_px(theme: &Theme, base_px: f32) -> Pixels {
+    px(base_px * icon_scale(ui_font_scale(theme)))
+}
+
+pub(crate) fn mono_icon_px(theme: &Theme, base_px: f32) -> Pixels {
+    px(base_px * icon_scale(mono_font_scale(theme)))
 }
 
 pub(crate) fn ui_px(theme: &Theme, base_px: f32) -> Pixels {
@@ -72,9 +83,17 @@ fn density_scale(font_scale: f32) -> f32 {
     (1.0 + (font_scale - 1.0) * DENSITY_SCALE_WEIGHT).clamp(MIN_DENSITY_SCALE, MAX_DENSITY_SCALE)
 }
 
+fn icon_scale(font_scale: f32) -> f32 {
+    if !font_scale.is_finite() {
+        return 1.0;
+    }
+
+    (1.0 + (font_scale - 1.0) * ICON_SCALE_WEIGHT).clamp(MIN_ICON_SCALE, MAX_ICON_SCALE)
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{density_scale, font_scale};
+    use super::{density_scale, font_scale, icon_scale};
 
     #[test]
     fn font_scale_preserves_default_and_clamps_extremes() {
@@ -95,5 +114,14 @@ mod tests {
         assert_eq!(density_scale(1.0), 1.0);
         assert!(density_scale(1.5) < 1.5);
         assert_eq!(density_scale(1.7), 1.25);
+    }
+
+    #[test]
+    fn icon_scale_tracks_text_more_closely_than_layout_density() {
+        assert_eq!(icon_scale(1.0), 1.0);
+        assert!(icon_scale(1.5) > density_scale(1.5));
+        assert!(icon_scale(1.5) < 1.5);
+        assert_eq!(icon_scale(2.0), 1.35);
+        assert_eq!(icon_scale(0.5), 0.90);
     }
 }

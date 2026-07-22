@@ -35,6 +35,7 @@ use std::{
 /// Unique-per-process id for `EditorView` instances, used to namespace GPUI
 /// element ids (multiple editor panes may show previews simultaneously).
 static NEXT_EDITOR_VIEW_ID: AtomicU64 = AtomicU64::new(1);
+use crate::ui_scale::ui_icon_px;
 
 const EDITOR_FONT_SIZE: f32 = 14.0;
 #[cfg_attr(not(test), allow(dead_code))]
@@ -1843,7 +1844,7 @@ impl Render for EditorView {
                     .child(
                         svg()
                             .path("phosphor/x.svg")
-                            .size(px(8.0))
+                            .size(ui_icon_px(&theme, 9.0))
                             .text_color(fg.opacity(if is_active { 0.55 } else { 0.42 })),
                     ),
             );

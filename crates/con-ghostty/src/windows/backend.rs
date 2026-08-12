@@ -58,14 +58,7 @@ impl WindowsGhosttyApp {
             config.font_size_px = size;
         }
         if let Some(colors) = colors {
-            let theme = theme_from_colors(colors);
-            config.clear_color = [
-                colors.background[0] as f32 / 255.0,
-                colors.background[1] as f32 / 255.0,
-                colors.background[2] as f32 / 255.0,
-                1.0,
-            ];
-            config.theme = Some(theme);
+            config.apply_theme(&theme_from_colors(colors));
         }
         if let Some(op) = background_opacity {
             config.background_opacity = clamp_opacity(op);
@@ -103,18 +96,11 @@ impl WindowsGhosttyApp {
         _background_image_fit: Option<&str>,
         _background_image_repeat: bool,
     ) -> Result<(), String> {
-        let theme = theme_from_colors(colors);
         let mut config = self.config.lock();
         config.font_family = font_family.to_string();
         config.font_fallback = font_fallback.to_vec();
         config.font_size_px = font_size;
-        config.clear_color = [
-            colors.background[0] as f32 / 255.0,
-            colors.background[1] as f32 / 255.0,
-            colors.background[2] as f32 / 255.0,
-            1.0,
-        ];
-        config.theme = Some(theme);
+        config.apply_theme(&theme_from_colors(colors));
         config.background_opacity = clamp_opacity(background_opacity);
         Ok(())
     }

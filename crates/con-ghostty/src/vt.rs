@@ -1174,24 +1174,52 @@ impl VtScreen {
         // substitute the terminal's default foreground/background from
         // the render state. Without this, the pwsh banner (and any
         // unstyled text) renders black-on-black.
+        // Fallback defaults when the render-state query returns an error
+        // (e.g. before the first theme has been applied). Use a visible
+        // grey foreground and Flexoki-dark background so we never paint
+        // black-on-black — which would be invisible and look like a
+        // broken renderer. The `#[default]` for these C structs is
+        // all-zero (pure black), which is NEVER a valid theme default.
         let mut default_fg = GhosttyColorRgb {
             r: 0xCC,
             g: 0xCC,
             b: 0xCC,
         };
-        let mut default_bg = GhosttyColorRgb::default();
+        let mut default_bg = GhosttyColorRgb {
+            r: 0x10,
+            g: 0x0F,
+            b: 0x0F,
+        };
         // SAFETY: out params typed as GhosttyColorRgb per render.h.
         unsafe {
-            let _ = ghostty_render_state_get(
+            let rc_fg = ghostty_render_state_get(
                 inner.render_state,
                 GhosttyRenderStateData::ColorForeground,
                 &mut default_fg as *mut _ as *mut c_void,
             );
-            let _ = ghostty_render_state_get(
+            let rc_bg = ghostty_render_state_get(
                 inner.render_state,
                 GhosttyRenderStateData::ColorBackground,
                 &mut default_bg as *mut _ as *mut c_void,
             );
+            if rc_fg != 0 {
+                log::warn!(
+                    "ghostty_render_state_get(ColorForeground) failed rc={rc_fg}; \
+                     using fallback fg=#{:02X}{:02X}{:02X}",
+                    default_fg.r,
+                    default_fg.g,
+                    default_fg.b
+                );
+            }
+            if rc_bg != 0 {
+                log::warn!(
+                    "ghostty_render_state_get(ColorBackground) failed rc={rc_bg}; \
+                     using fallback bg=#{:02X}{:02X}{:02X}",
+                    default_bg.r,
+                    default_bg.g,
+                    default_bg.b
+                );
+            }
         }
 
         // Ghostty's render-state dimensions can lag the host resize by a

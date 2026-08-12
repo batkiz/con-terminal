@@ -66,6 +66,12 @@ const INITIAL_INSTANCE_CAPACITY: u32 = 16 * 1024;
 /// VT attributes occupy bits 0..=4.
 const INTERNAL_ATTR_CJK: u8 = 1 << 5;
 
+/// Default terminal background: Flexoki dark (#100F0F). Must stay in
+/// sync with `con_terminal::TerminalTheme::flexoki_dark().background`.
+/// Default terminal background: Flexoki dark (#100F0F). Must stay in
+/// sync with `con_terminal::TerminalTheme::flexoki_dark().background`.
+const DEFAULT_CLEAR_COLOR: [f32; 4] = [16.0 / 255.0, 15.0 / 255.0, 15.0 / 255.0, 1.0];
+
 #[derive(Debug, Clone)]
 pub struct RendererConfig {
     pub font_family: String,
@@ -73,18 +79,38 @@ pub struct RendererConfig {
     pub font_size_px: f32,
     pub initial_width: u32,
     pub initial_height: u32,
-    /// RGB clear-target color. Alpha is taken from `background_opacity`
-    /// at render time so opacity changes don't have to thread back into
-    /// here.
+    /// Straight (non-premultiplied) RGB clear color; alpha is always 1.0.
+    /// At render time the RGB channels are pre-multiplied by
+    /// `background_opacity` on the D3D11 clear so the offscreen texture
+    /// carries premultiplied-alpha pixels that GPUI's compositor expects.
+    ///
+    /// Use [`RendererConfig::apply_theme`] to keep this in sync with the
+    /// VT palette — margins outside the grid paint from `clear_color`.
     pub clear_color: [f32; 4],
     /// 0.0 (fully see-through) … 1.0 (opaque). Multiplied into the
     /// clear-color alpha and the per-cell default-bg alpha so that
     /// unstyled cells composite over Mica / DComp visuals beneath.
     /// Cells with explicit SGR backgrounds stay solid.
     pub background_opacity: f32,
-    /// Theme handed to libghostty so SGR colors resolve to the user's
+    /// Theme handed to the VT so SGR colors resolve to the user's
     /// palette. `None` keeps libghostty's built-in defaults.
     pub theme: Option<ThemeColors>,
+}
+
+impl RendererConfig {
+    /// Atomically apply a terminal color theme, keeping `clear_color`
+    /// and the VT palette in agreement. Call this whenever the user
+    /// switches themes; it replaces the three writes (`clear_color`,
+    /// `theme`, `vt.set_theme`) that must always stay in lockstep.
+    pub fn apply_theme(&mut self, theme: &ThemeColors) {
+        self.clear_color = [
+            theme.bg[0] as f32 / 255.0,
+            theme.bg[1] as f32 / 255.0,
+            theme.bg[2] as f32 / 255.0,
+            1.0,
+        ];
+        self.theme = Some(theme.clone());
+    }
 }
 
 impl Default for RendererConfig {
@@ -95,7 +121,7 @@ impl Default for RendererConfig {
             font_size_px: 14.0,
             initial_width: 800,
             initial_height: 600,
-            clear_color: [0.06, 0.06, 0.07, 1.0],
+            clear_color: DEFAULT_CLEAR_COLOR,
             background_opacity: 1.0,
             theme: None,
         }
@@ -534,12 +560,22 @@ impl Renderer {
                 MinDepth: 0.0,
                 MaxDepth: 1.0,
             };
-            // Multiply alpha by background_opacity so transparent cells
-            // composite with the backdrop (Mica / DComp). Pre-multiply
-            // RGB so the BGRA readback handed to GPUI behaves correctly
-            // under GPUI's premultiplied-alpha blend (otherwise
-            // translucent pixels look washed out / haloed against the
-            // visual beneath).
+            // ── Premultiplied-alpha compositing pipeline ──────
+            //
+            // GPUI's compositor expects premultiplied alpha in
+            // `RenderImage` pixels (see `shaders.hlsl:ps_main`).
+            // We satisfy that contract at two points:
+            //
+            // 1. This `ClearRenderTargetView` — pre-multiplies the
+            //    straight `config.clear_color` RGB by `opacity` so
+            //    margin pixels (outside the cell grid) are also
+            //    premultiplied.
+            // 2. The pixel shader (`ps_main`) — for each drawn cell
+            //    the shader computes `rgb * alpha` before output.
+            //
+            // Both points produce the same premultiplied tuple
+            // `(R·α, G·α, B·α, α)` for a default-background cell,
+            // so the cell grid and margins composite identically.
             let opacity = effective_background_opacity(snapshot, config);
             let clear = [
                 config.clear_color[0] * opacity,
@@ -899,27 +935,35 @@ impl Renderer {
             .selection
             .lock()
             .expect("selection mutex poisoned in draw_cells()");
-        // Sentinel alpha=0 in cell.bg means "default theme background"
-        // (set by the VT layer); rewrite it to the configured opacity
-        // so the shader composes the cell over Mica with the right
-        // see-through level. Cells with explicit SGR backgrounds carry
-        // alpha=0xFF and aren't touched.
+        // ── Alpha-sentinel protocol ────────────────────────────
+        //
+        // The VT parser tags every cell whose background color matches
+        // the theme's default bg with `alpha = 0x00` (the "sentinel").
+        // Cells with an explicit SGR background (e.g. `\e[48;5;196m`)
+        // always carry `alpha = 0xFF`.
+        //
+        // At draw time we rewrite sentinel cells to the user-configured
+        // `background_opacity` so the default background can be
+        // translucent (Mica / DComp shows through). Explicit-SGR cells
+        // stay opaque so tool output with intentional backgrounds
+        // doesn't become see-through unexpectedly.
         //
         // Invariant: any non-sentinel bg value MUST carry alpha=0xFF.
-        // Producers in `vt.rs::read_cell` enforce this — explicit RGB
-        // and palette colors hard-set the alpha byte. The benign edge
-        // case is `background_opacity == 0.0`: opacity_byte is also 0,
-        // so the rewrite is a no-op (still fully transparent default
-        // bg) and there is no observable ambiguity. If a future code
-        // path injects an `0x......00` value into cell.bg without
-        // meaning the sentinel, it would be silently rewritten — keep
-        // the producers honest.
+        // `vt.rs::read_cell` enforces this — explicit RGB and palette
+        // colors hard-set the alpha byte.
+        //
+        // Edge case: `background_opacity == 0.0` produces
+        // `opacity_byte == 0x00`, so the rewrite is a no-op (still
+        // fully transparent default bg) and there is no ambiguity
+        // between "fully transparent by config" and "sentinel".
         let background_opacity = effective_background_opacity(snapshot, config);
         let opacity_byte: u8 = (background_opacity * 255.0).round() as u8;
         let apply_opacity = |bg: u32| -> u32 {
             if (bg & 0xFF) == 0 {
+                // Sentinel — replace alpha with the configured opacity.
                 (bg & 0xFFFFFF00) | opacity_byte as u32
             } else {
+                // Explicit SGR background — keep alpha at 0xFF.
                 bg
             }
         };
@@ -936,12 +980,18 @@ impl Renderer {
         instances.reserve(snapshot.cells.len().saturating_add(1));
         let cell_w_px = atlas.metrics().cell_width_px;
 
-        let cursor_pos = if snapshot.cursor.visible {
+        // Show the text cursor only when the viewport is at the live
+        // terminal bottom (no scrollback). During scrollback the cursor
+        // belongs to the active prompt line which is below the visible
+        // area; ghostty may still report a cursor position — often
+        // (0,0) — that would paint a confusing block at the top-left
+        // of the scrolled-back grid.
+        let viewport_offset = snapshot.scrollbar.map_or(0, |scrollbar| scrollbar.offset);
+        let cursor_pos = if snapshot.cursor.visible && viewport_offset == 0 {
             Some((snapshot.cursor.col, snapshot.cursor.row))
         } else {
             None
         };
-        let viewport_offset = snapshot.scrollbar.map_or(0, |scrollbar| scrollbar.offset);
         let mut cursor_source: Option<Instance> = None;
         let mut has_wide_glyph = false;
 

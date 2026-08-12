@@ -70,6 +70,11 @@ pub struct RenderSession {
     /// tiny touchpad event into a full-row jump.
     scroll_remainder: Mutex<ScrollRemainder>,
     drag_anchor: Mutex<Option<(u16, u64)>>,
+    /// Accumulates characters from `write_input` to reconstruct the
+    /// command line being typed. When Enter is pressed the complete
+    /// line is flushed to the transcript so typed commands survive
+    /// session save/restore even when PTY echo doesn't emit them.
+    input_buffer: Mutex<String>,
 }
 
 unsafe impl Send for RenderSession {}
@@ -215,6 +220,7 @@ impl RenderSession {
             low_latency_burst_until: Mutex::new(None),
             scroll_remainder: Mutex::new(ScrollRemainder::default()),
             drag_anchor: Mutex::new(None),
+            input_buffer: Mutex::new(String::new()),
         })
     }
 
@@ -317,18 +323,11 @@ impl RenderSession {
         let opacity_changed = (config.background_opacity - clamped_opacity).abs() > f32::EPSILON;
         config.background_opacity = clamped_opacity;
         if let Some(theme) = theme {
-            // Margins (pixels outside the cell grid) paint from
-            // `clear_color`, so a theme switch that only rewrites the
-            // palette would leave the border showing the previous
-            // theme's background. Mirror what `WindowsGhosttyApp::
-            // update_appearance` does at session construction.
-            config.clear_color = [
-                theme.bg[0] as f32 / 255.0,
-                theme.bg[1] as f32 / 255.0,
-                theme.bg[2] as f32 / 255.0,
-                1.0,
-            ];
-            config.theme = Some(theme.clone());
+            // Apply theme to both the renderer config and the VT screen.
+            // `apply_theme` keeps `clear_color` in lockstep with the
+            // palette so margins outside the cell grid don't show a
+            // stale background from the previous theme.
+            config.apply_theme(theme);
             // `set_theme` bumps the VT generation itself, so the next
             // prepaint re-runs draw_cells with the new palette + new
             // clear_color + any new opacity.
@@ -471,6 +470,34 @@ impl RenderSession {
         } else {
             std::borrow::Cow::Borrowed(text.as_bytes())
         };
+        // Accumulate typed input so complete command lines can be
+        // captured for session save/restore even when the PTY line
+        // discipline doesn't echo (e.g. PowerShell on ConPTY may
+        // handle echo inside conhost without sending the echoed bytes
+        // through the output pipe).
+        {
+            let mut buf = self.input_buffer.lock();
+            if text.contains('\r') || text.contains('\n') {
+                // Enter — flush the accumulated input line to the
+                // transcript as a recorded command.
+                if !buf.is_empty() {
+                    buf.push('\n');
+                    self.transcript.lock().push(&buf);
+                    buf.clear();
+                }
+            } else if text.len() == 1 {
+                let ch = text.chars().next().unwrap();
+                if ch == '\x08' || ch == '\x7f' {
+                    // Backspace — remove last character from buffer.
+                    buf.pop();
+                } else if !ch.is_control() || ch == '\t' {
+                    buf.push(ch);
+                }
+            } else {
+                // Multi-character paste — record directly.
+                self.transcript.lock().push(text);
+            }
+        }
         let _ = self.conpty.write(&bytes);
     }
 

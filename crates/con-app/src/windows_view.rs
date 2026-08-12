@@ -1364,13 +1364,25 @@ impl GhosttyView {
         ))
     }
 
+    /// Background color shown before the terminal surface paints its
+    /// first frame (and behind the terminal image when it is smaller
+    /// than the container).
+    ///
+    /// Uses straight (non-premultiplied) RGBA because GPUI expects
+    /// straight alpha in `Hsla` / `Rgba` and handles pre-multiplication
+    /// internally during compositing. This produces the same on-screen
+    /// color as the terminal image's premultiplied pixels, provided
+    /// `config.clear_color` has been kept in sync with the theme via
+    /// [`RendererConfig::apply_theme`].
     fn placeholder_background(&self) -> Option<Hsla> {
         let config = self.app.renderer_config();
         let opacity = config.background_opacity.clamp(0.0, 1.0);
         if opacity <= f32::EPSILON {
             return None;
         }
-
+        // `clear_color` is straight RGB with alpha=1.0. Combine with
+        // the user-configured opacity so the placeholder matches the
+        // actual terminal background (which uses the same values).
         Some(
             Rgba {
                 r: config.clear_color[0].clamp(0.0, 1.0),

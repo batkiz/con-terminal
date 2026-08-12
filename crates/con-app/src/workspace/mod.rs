@@ -76,12 +76,12 @@ use crate::{
     EditorDeleteForward, EditorInsertNewline, EditorMoveDown, EditorMoveEnd, EditorMoveHome,
     EditorMoveLeft, EditorMoveLineEnd, EditorMoveLineStart, EditorMoveRight, EditorMoveUp,
     EditorSave, EditorSelectDown, EditorSelectEnd, EditorSelectHome, EditorSelectLeft,
-    EditorSelectRight, EditorSelectUp, ExportWorkspaceLayout, FocusFiles, FocusInput, Minimize,
-    NewSurface, NewSurfaceSplitDown, NewSurfaceSplitRight, NewTab, NextSurface, NextTab,
-    OpenWorkspaceLayoutWindow, Paste, PreviousSurface, PreviousTab, Quit, RenameSurface,
-    SearchFiles, SelectAll, SelectTab1, SelectTab2, SelectTab3, SelectTab4, SelectTab5, SelectTab6,
-    SelectTab7, SelectTab8, SelectTab9, SplitDown, SplitLeft, SplitRight, SplitUp,
-    ToggleAgentPanel, ToggleLeftPanel, TogglePaneScopePicker, TogglePaneZoom, Undo,
+    EditorSelectRight, EditorSelectUp, EditorTogglePreview, ExportWorkspaceLayout, FocusFiles,
+    FocusInput, Minimize, NewSurface, NewSurfaceSplitDown, NewSurfaceSplitRight, NewTab,
+    NextSurface, NextTab, OpenWorkspaceLayoutWindow, Paste, PreviousSurface, PreviousTab, Quit,
+    RenameSurface, SearchFiles, SelectAll, SelectTab1, SelectTab2, SelectTab3, SelectTab4,
+    SelectTab5, SelectTab6, SelectTab7, SelectTab8, SelectTab9, SplitDown, SplitLeft, SplitRight,
+    SplitUp, ToggleAgentPanel, ToggleLeftPanel, TogglePaneScopePicker, TogglePaneZoom, Undo,
 };
 use con_agent::{
     AgentConfig, Conversation, ProviderKind, TerminalExecRequest, TerminalExecResponse,
@@ -145,6 +145,10 @@ pub struct ConWorkspace {
     sidebar: Entity<SessionSidebar>,
     tabs: Vec<Tab>,
     active_tab: usize,
+    /// Stable summary id of the last activated editor-only tab.
+    ///
+    /// This must not be an index: tab closes and reorders shift indices.
+    last_editor_tab_id: Option<u64>,
     /// True when this workspace is the singleton quick terminal,
     /// which must never be fully closed — closing the last tab
     /// should reinitialize a fresh tab and hide the window instead.

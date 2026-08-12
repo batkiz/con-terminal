@@ -96,6 +96,71 @@ Closing follows the pane model: `Cmd+W` closes editor files one by one. When the
 last editor file in an editor pane closes, the pane is closed instead of
 rendering a "No file open" placeholder.
 
+## Markdown Preview
+
+Markdown tabs (`language_for_path == "markdown"`) can switch in place between
+source editing and a rendered preview. The toggle lives at the right end of the
+editor tab bar (eye/code phosphor icon) and on `Cmd+Shift+V`
+(`EditorTogglePreview`, scoped to `EditorView` like the other editor bindings).
+
+- Preview state is per `EditorTab` and session-only — it is not serialized into
+  workspace layouts, and the pane tree is untouched.
+- The rendered view reuses the agent panel's markdown renderer
+  (`chat_markdown.rs`) through `render_parsed_chat_markdown_file_preview`,
+  wrapped in a scroll container by `editor_preview.rs`. Whole-document
+  rendering, no block virtualization.
+- Reparsing is live: `schedule_preview_parse` debounces 300 ms, parses on the
+  background executor, and caches the result per tab keyed on the buffer
+  `revision`. A generation counter drops stale results, mirroring the LSP
+  did-change debounce. The render pass reschedules whenever the cached revision
+  lags the buffer.
+- Local images render inline: `mdast::Node::Image` parses into a dedicated
+  `MarkdownInline::Image`, and a paragraph holding a single image renders as a
+  GPUI `img()` element with the path resolved against the markdown file's
+  directory (`resolve_image_source`). Remote `http(s)` images also render
+  inline through GPUI's async image asset loader (alt text shows while
+  loading and as the failure fallback); only `data:` and empty URLs degrade
+  to alt text. Everything keeps degrading to alt text when no base dir is
+  set — so agent panel rendering is unchanged.
+- Raw HTML renders structurally instead of leaking source text: block-level
+  HTML goes through `html5ever` (`parse_html_blocks` — headings, paragraphs,
+  lists, quotes, `<pre>`, and linked `<img>` badges map onto markdown blocks),
+  while inline HTML arrives as single tag tokens and is reconstructed with a
+  container stack in `parse_inline_nodes` (`<strong>`/`<em>`/`<s>`/`<code>`/
+  `<kbd>`/`<a>`/`<img>`/`<br>`; `<script>`/`<style>` content is dropped and
+  unknown tags degrade to their text).
+- Preview mode is read-only: text mutation methods (`insert_text`,
+  `delete_*`, `cut_selection`, `undo`) no-op, and editor mouse hit-testing is
+  skipped while a preview is showing.
+
+## Open in Editor Tab
+
+Each file row in the file explorer shows an "open in editor tab" icon (arrow-square-out phosphor icon) on hover. Directories do not show the icon — only files.
+
+Clicking the icon emits `OpenFileInEditorTab`, which is distinct from the regular `OpenFile` event emitted when clicking the row itself. This ensures the icon click never triggers a terminal pane file open.
+
+Editor-only tabs render with a file-code icon (distinct from terminal tabs) in both the horizontal tab strip and the vertical sidebar, and the tab title follows the active file name via the `ActiveFileChanged` subscription on each editor view.
+
+**Tab reuse logic** (`reusable_editor_tab_index`):
+
+- If the last active editor-only tab still exists, reuse it by stable tab id.
+- Otherwise, if the active tab is editor-only, reuse it.
+- Otherwise, scan from the active tab forward, wrapping around, and reuse the
+  first editor-only tab.
+- If no editor-only tab exists, create a new editor tab
+  (`ConWorkspace::new_editor_tab`).
+
+Editor-only means the tab has no terminal panes. A normal terminal tab with an
+embedded editor pane from row-click is intentionally not reused by this action.
+
+**Multiple files**: Each subsequent "open in editor tab" action adds a new `EditorTab` to the active editor pane's tab bar. Clicking the same file twice while it is already open switches to that tab's page instead of reopening it (handled by `EditorView::open_file`).
+
+**File tree sync**: When an editor tab gains focus, `sync_file_tree_from_active_focus` updates the file explorer root to the editor's active file's parent directory, preserving the existing root if it already contains the file.
+
+**Fallback on last close**: When the last editor file in an editor pane is closed, the pane itself is closed, and focus falls back to the next available pane (typically the last active terminal tab).
+
+**Icon visibility**: The icon uses `opacity(0.0)` by default and `opacity(1.0)` on hover. It renders in the list item's muted foreground color and is visible in both light and dark themes.
+
 ## Focus and Keybindings
 
 Editor text-editing bindings are scoped to `EditorView` so terminal keys such as
@@ -132,6 +197,9 @@ crates/con-app/src/editor_syntax.rs
 
 crates/con-app/src/editor_lsp.rs
   Best-effort language-server process integration and diagnostics parsing.
+
+crates/con-app/src/editor_preview.rs
+  Scrollable markdown preview body on top of the chat markdown renderer.
 
 crates/con-app/src/workspace/editor_actions.rs
   Editor action dispatch and text-key fallback handling.

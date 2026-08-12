@@ -4,7 +4,98 @@ All notable changes to con are documented here.
 
 con is still pre-release, so entries may group related beta work while the product shape is stabilizing.
 
-## `v0.1.0-beta.79` - unreleased
+## `v0.1.0-beta.83` - 2026-08-11
+
+### Fixed
+
+**Terminal**
+
+- Forward right-clicks to terminal apps that enabled mouse reporting, so TUI
+  menus work as expected while Con's context menu still appears for ordinary
+  shell right-clicks. _(PR
+  [#266](https://github.com/nowledge-co/con-terminal/pull/266) by
+  [@sunny0826](https://github.com/sunny0826))_
+- Fixed shifted text input in macOS terminal applications such as LazyGit, so
+  `Shift+P` reaches apps as uppercase `P` instead of triggering lowercase `p`
+  actions. _(PR [#264](https://github.com/nowledge-co/con-terminal/pull/264) by
+  [@Eric-Song-Nop](https://github.com/Eric-Song-Nop))_
+
+---
+
+## `v0.1.0-beta.82` - 2026-08-07
+
+### Changed
+
+**Markdown**
+
+- Updated the Mermaid renderer and HTML parser stack used by rich Markdown so
+  diagram and inline HTML previews stay aligned with current upstream fixes.
+  _(PR [#263](https://github.com/nowledge-co/con-terminal/pull/263) by
+  [@wey-gu](https://github.com/wey-gu))_
+
+### Fixed
+
+**Sidebar**
+
+- Fixed pinned sidebar tab clicks so selecting the active tab no longer
+  collapses the panel, preserving drag reorder and double-click rename flows.
+  _(PR [#261](https://github.com/nowledge-co/con-terminal/pull/261) by
+  [@sunny0826](https://github.com/sunny0826))_
+- Fixed vertical-tab hover cards so they render as workspace overlays, stay
+  inside the window, and clear stale hover state when the rail is hidden. _(PR
+  [#262](https://github.com/nowledge-co/con-terminal/pull/262) by
+  [@sunny0826](https://github.com/sunny0826))_
+
+---
+
+## `v0.1.0-beta.81` - 2026-08-06
+
+### Added
+
+**Editor**
+
+- Added a file-tree affordance to open files in a dedicated editor tab. The
+  editor tab is reused for additional files, keeps terminal pane layouts
+  untouched, and remains separate from the existing row-click behavior. _(PR
+  [#257](https://github.com/nowledge-co/con-terminal/pull/257) by
+  [@sunny0826](https://github.com/sunny0826))_
+
+### Fixed
+
+**Editor**
+
+- Fixed Markdown preview alignment in wide editor panes: code blocks, tables,
+  and Mermaid diagrams now share the centered content column instead of
+  spanning the pane edge, and long code lines scroll horizontally. _(PR
+  [#258](https://github.com/nowledge-co/con-terminal/pull/258) by
+  [@sunny0826](https://github.com/sunny0826))_
+
+---
+
+## `v0.1.0-beta.80` - 2026-08-05
+
+### Added
+
+**Editor**
+
+- Added an in-place Markdown preview for editor tabs, with live refresh,
+  rendered tables, code blocks, math, Mermaid diagrams, common inline HTML,
+  and local or remote images resolved from the document. _(PR
+  [#254](https://github.com/nowledge-co/con-terminal/pull/254) by
+  [@sunny0826](https://github.com/sunny0826))_
+
+### Fixed
+
+**Editor**
+
+- Fixed Markdown preview layout in wide editor panes: blockquotes now wrap
+  inside the preview column, and prose is centered instead of hugging the left
+  edge. _(PR [#255](https://github.com/nowledge-co/con-terminal/pull/255) by
+  [@sunny0826](https://github.com/sunny0826))_
+
+---
+
+## `v0.1.0-beta.79` - 2026-07-25
 
 ### Added
 
@@ -23,6 +114,19 @@ con is still pre-release, so entries may group related beta work while the produ
   follows Rig's published release instead of an interim source revision. _(PR
   [#250](https://github.com/nowledge-co/con-terminal/pull/250) by
   [@wey-gu](https://github.com/wey-gu))_
+
+### Fixed
+
+**Providers**
+
+- Fixed ChatGPT Subscription model discovery after the Codex model catalog
+  started requiring an explicit client compatibility version. **Fetch Models**
+  now loads the account's available catalog, including GPT-5.6 models where
+  available, and the offline fallback includes the GPT-5.6 family. _(PR
+  [#252](https://github.com/nowledge-co/con-terminal/pull/252) by
+  [@wey-gu](https://github.com/wey-gu); reported in issue
+  [#251](https://github.com/nowledge-co/con-terminal/issues/251) by
+  [@zjp1997720](https://github.com/zjp1997720))_
 
 ---
 

@@ -60,7 +60,7 @@ fn sanitize_tab_accent_alpha(value: f32, default: f32, max: f32) -> f32 {
 }
 
 fn default_restore_terminal_text() -> bool {
-    true
+    false
 }
 
 pub fn is_gpui_pseudo_font_family(name: &str) -> bool {
@@ -1190,8 +1190,8 @@ font_fallback = [" Sarasa Mono SC ", "Segoe UI Emoji", "sarasa mono sc", ".Syste
     }
 
     #[test]
-    fn new_configs_enable_restore_terminal_text_by_default() {
-        assert!(Config::default().appearance.restore_terminal_text);
+    fn new_configs_disable_restore_terminal_text_by_default() {
+        assert!(!Config::default().appearance.restore_terminal_text);
     }
 
     #[test]
@@ -1202,7 +1202,7 @@ terminal_opacity = 0.8
 "#;
         let config: Config = toml::from_str(content).unwrap();
 
-        assert!(config.appearance.restore_terminal_text);
+        assert!(!config.appearance.restore_terminal_text);
     }
 
     #[test]

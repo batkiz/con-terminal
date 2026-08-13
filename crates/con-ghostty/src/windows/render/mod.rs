@@ -156,6 +156,13 @@ pub struct Renderer {
     /// frame (the cleared background), giving the pane something to
     /// show before the shell has printed anything.
     last_generation: Mutex<u64>,
+    /// Viewport scrollbar offset of the last presented frame. When the
+    /// viewport scrolls (wheel / scrollbar / page keys), libghostty
+    /// repositions the visible window and the row collection changes
+    /// wholesale; dirty-row tracking cannot be trusted for that frame.
+    /// Any offset change forces a full repaint with a full-frame
+    /// readback so the scrolled viewport always lands on screen.
+    last_scroll_offset: Mutex<Option<u64>>,
     selection: Mutex<Option<Selection>>,
     /// Wall-clock time of the last `Rendered` outcome. Drives the
     /// `MIN_FALLBACK_PRESENT_INTERVAL` cap that decouples presentation
@@ -314,6 +321,7 @@ impl Renderer {
             instances: Mutex::new(Vec::with_capacity(INITIAL_INSTANCE_CAPACITY as usize)),
             has_full_frame: Mutex::new(false),
             last_generation: Mutex::new(u64::MAX),
+            last_scroll_offset: Mutex::new(None),
             selection: Mutex::new(None),
             last_presented_at: Mutex::new(None),
             width_px: width,
@@ -487,6 +495,16 @@ impl Renderer {
         let sel_hash = selection.map(|s| s.hash_u64()).unwrap_or(0);
         let geometry_hash =
             geometry_fingerprint(snapshot.cols, snapshot.rows, self.width_px, self.height_px);
+        let scroll_offset = snapshot.scrollbar.map_or(0, |scrollbar| scrollbar.offset);
+        let scroll_changed = {
+            let mut last_scroll = self
+                .last_scroll_offset
+                .lock()
+                .expect("last_scroll_offset mutex poisoned in render()");
+            let changed = *last_scroll != Some(scroll_offset);
+            *last_scroll = Some(scroll_offset);
+            changed
+        };
         let combined = snapshot
             .generation
             .wrapping_mul(0x9E37_79B9_7F4A_7C15)
@@ -496,11 +514,11 @@ impl Renderer {
                 .last_generation
                 .lock()
                 .expect("last_generation mutex poisoned in render()");
-            if *last == combined {
-                false
-            } else {
+            if scroll_changed || *last != combined {
                 *last = combined;
                 true
+            } else {
+                false
             }
         };
 
@@ -603,6 +621,7 @@ impl Renderer {
             // and the staging texture will be ready to Map().
             let submit_started = perf_trace_enabled().then(Instant::now);
             let can_partial_readback = in_flight_before_submit == 0
+                && !scroll_changed
                 && *self
                     .has_full_frame
                     .lock()

@@ -3300,7 +3300,7 @@ impl SettingsPanel {
                 .child(group_label("Continuity", &theme))
                 .child(card(theme, card_opacity).child(toggle_row(
                     "Restore Terminal Text",
-                    "Keep terminal text on restart continuity.",
+                    "Keep terminal text on restart continuity. Off by default: on Windows, ConPTY redraw noise can make restored history look garbled; PowerShell/PSReadLine history is preserved anyway.",
                     Switch::new("restore-terminal-text-toggle")
                         .checked(self.config.appearance.restore_terminal_text)
                         .small()

@@ -343,7 +343,8 @@ impl Render for SidebarSearchView {
                             .child(
                                 svg()
                                     .path("phosphor/file-text.svg")
-                                    .size(ui_icon_px(theme, 13.0))
+                                    .size(ui_icon_px(theme, 13.0))
+                                    .flex_shrink_0()
                                     .text_color(theme.muted_foreground.opacity(0.72)),
                             )
                             .child(

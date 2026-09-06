@@ -6,9 +6,9 @@ use con_agent::{
 use con_core::{
     Config,
     config::{
-        APP_ICON_GROUPS, APP_ICONS, AppearanceConfig, DEFAULT_TERMINAL_FONT_FAMILY, MAX_UI_FONT_SIZE, MIN_UI_FONT_SIZE,
-        TabsOrientation, is_bundled_terminal_font_family, is_gpui_pseudo_font_family,
-        sanitize_terminal_font_fallback, sanitize_terminal_font_family,
+        APP_ICON_GROUPS, APP_ICONS, AppearanceConfig, DEFAULT_TERMINAL_FONT_FAMILY,
+        MAX_UI_FONT_SIZE, MIN_UI_FONT_SIZE, TabsOrientation, is_bundled_terminal_font_family,
+        is_gpui_pseudo_font_family, sanitize_terminal_font_fallback, sanitize_terminal_font_family,
     },
 };
 use futures::{FutureExt, StreamExt};
@@ -3352,7 +3352,11 @@ impl SettingsPanel {
                 .child(group_label("Continuity", &theme))
                 .child(card(theme, card_opacity).child(toggle_row(
                     "Restore Terminal Text",
-                    "Keep terminal text on restart continuity.",
+                    if cfg!(target_os = "windows") {
+                        "Restore previous terminal text. Off by default because ConPTY redraws can distort saved text."
+                    } else {
+                        "Keep terminal text on restart continuity."
+                    },
                     Switch::new("restore-terminal-text-toggle")
                         .checked(self.config.appearance.restore_terminal_text)
                         .small()

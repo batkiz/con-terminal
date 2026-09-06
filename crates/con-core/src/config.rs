@@ -60,7 +60,7 @@ fn sanitize_tab_accent_alpha(value: f32, default: f32, max: f32) -> f32 {
 }
 
 fn default_restore_terminal_text() -> bool {
-    true
+    !cfg!(target_os = "windows")
 }
 
 pub fn is_gpui_pseudo_font_family(name: &str) -> bool {
@@ -1368,8 +1368,11 @@ font_fallback = [" Sarasa Mono SC ", "Segoe UI Emoji", "sarasa mono sc", ".Syste
     }
 
     #[test]
-    fn new_configs_enable_restore_terminal_text_by_default() {
-        assert!(Config::default().appearance.restore_terminal_text);
+    fn new_configs_use_platform_restore_terminal_text_default() {
+        assert_eq!(
+            Config::default().appearance.restore_terminal_text,
+            !cfg!(target_os = "windows")
+        );
     }
 
     #[test]
@@ -1380,18 +1383,19 @@ terminal_opacity = 0.8
 "#;
         let config: Config = toml::from_str(content).unwrap();
 
-        assert!(config.appearance.restore_terminal_text);
+        assert_eq!(
+            config.appearance.restore_terminal_text,
+            !cfg!(target_os = "windows")
+        );
     }
 
     #[test]
     fn loaded_configs_preserve_explicit_restore_terminal_text() {
-        let content = r#"
-[appearance]
-restore_terminal_text = false
-"#;
-        let config: Config = toml::from_str(content).unwrap();
-
-        assert!(!config.appearance.restore_terminal_text);
+        for enabled in [false, true] {
+            let content = format!("[appearance]\nrestore_terminal_text = {enabled}\n");
+            let config: Config = toml::from_str(&content).unwrap();
+            assert_eq!(config.appearance.restore_terminal_text, enabled);
+        }
     }
 
     #[test]

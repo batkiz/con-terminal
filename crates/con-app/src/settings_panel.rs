@@ -3251,7 +3251,11 @@ impl SettingsPanel {
                 .child(group_label("Continuity", &theme))
                 .child(card(theme, card_opacity).child(toggle_row(
                     "Restore Terminal Text",
-                    "Keep terminal text on restart continuity.",
+                    if cfg!(target_os = "windows") {
+                        "Restore previous terminal text. Off by default because ConPTY redraws can distort saved text."
+                    } else {
+                        "Keep terminal text on restart continuity."
+                    },
                     Switch::new("restore-terminal-text-toggle")
                         .checked(self.config.appearance.restore_terminal_text)
                         .small()

@@ -149,6 +149,8 @@ pub struct Renderer {
     /// 0` on a quiet VT — still produces a frame (the cleared background),
     /// giving the pane something to show before the shell has printed anything.
     last_generation: Mutex<u64>,
+    /// Viewport offset of the last submitted frame. Commit only after drawing succeeds.
+    last_scroll_offset: Mutex<Option<u64>>,
     /// Wall-clock time of the last `Rendered` outcome. Drives the
     /// `MIN_FALLBACK_PRESENT_INTERVAL` cap that decouples presentation
     /// rate from the VT update rate, so continuous-output TUIs (issue
@@ -278,6 +280,7 @@ impl Renderer {
             has_full_frame: Mutex::new(false),
             kitty_readback: Mutex::new(KittyReadbackState::default()),
             last_generation: Mutex::new(u64::MAX),
+            last_scroll_offset: Mutex::new(None),
             last_presented_at: Mutex::new(None),
             width_px: width,
             height_px: height,
@@ -432,15 +435,22 @@ impl Renderer {
         let prof_started = perf_trace_enabled().then(Instant::now);
         let geometry_hash =
             geometry_fingerprint(snapshot.cols, snapshot.rows, self.width_px, self.height_px);
+        let scroll_offset = snapshot.scrollbar.map_or(0, |scrollbar| scrollbar.offset);
+        let scroll_changed = *self
+            .last_scroll_offset
+            .lock()
+            .expect("last_scroll_offset mutex poisoned")
+            != Some(scroll_offset);
         let combined = snapshot
             .generation
             .wrapping_mul(0x9E37_79B9_7F4A_7C15)
             .wrapping_add(geometry_hash.rotate_left(13));
-        let needs_draw = *self
-            .last_generation
-            .lock()
-            .expect("last_generation mutex poisoned in render()")
-            != combined;
+        let needs_draw = scroll_changed
+            || *self
+                .last_generation
+                .lock()
+                .expect("last_generation mutex poisoned in render()")
+                != combined;
 
         let mut ring = self
             .staging_ring
@@ -531,7 +541,8 @@ impl Renderer {
             // Image damage is relative to the last frame handed to GPUI.
             // Partial patches are safe only when no older mailbox slot can be
             // presented first and change that baseline.
-            let can_partial_readback = in_flight_before_submit == 0
+            let can_partial_readback = !scroll_changed
+                && in_flight_before_submit == 0
                 && *self
                     .has_full_frame
                     .lock()
@@ -552,6 +563,10 @@ impl Renderer {
                 .last_generation
                 .lock()
                 .expect("last_generation mutex poisoned after submit") = combined;
+            *self
+                .last_scroll_offset
+                .lock()
+                .expect("last_scroll_offset mutex poisoned after submit") = Some(scroll_offset);
             submit_ms = submit_started
                 .map(|started| started.elapsed().as_secs_f64() * 1000.0)
                 .unwrap_or(0.0);

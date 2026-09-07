@@ -17,6 +17,13 @@ con is still pre-release, so entries may group related beta work while the produ
 
 ### Fixed
 
+**Windows**
+
+- Changing the terminal font or its size now updates panes that are already
+  open, including their cell metrics and shell geometry. _(PR
+  [#346](https://github.com/nowledge-co/con-terminal/pull/346) by
+  [@batkiz](https://github.com/batkiz))_
+
 **macOS**
 
 - Selecting terminal text copies it to the clipboard again, without weakening

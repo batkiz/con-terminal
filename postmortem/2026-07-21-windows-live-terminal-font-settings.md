@@ -15,7 +15,15 @@ The Windows `WindowsGhosttyTerminal::update_appearance` implementation intention
 - Retain the bundled collection so live switching between system fonts and IoskeleyMono works in both directions.
 - Recompute the VT/ConPTY grid after cell metrics change and force a repaint.
 - Keep the latest logical font size for subsequent DPI changes.
+- Track incomplete geometry synchronization explicitly, so a transient VT,
+  mouse-geometry, or ConPTY resize failure is retried on the next prepaint.
+- Apply independent theme and opacity changes even when DirectWrite rejects a
+  requested font update.
 
 ## What we learned
 
 App-level renderer configuration is only a template for future panes. Every appearance setting advertised as a live preview must also have a per-session update path, and font updates must treat family, collection, metrics, grid size, and DPI-scaled size as one operation.
+
+That operation also needs a durable retry boundary. Logging a partial geometry
+failure is not enough: the view must keep reconciling renderer metrics, VT
+geometry, and ConPTY dimensions until all three agree.

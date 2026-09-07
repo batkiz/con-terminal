@@ -641,7 +641,9 @@ impl GhosttyView {
         // Recompute the grid and mouse cell geometry after a DPI change even
         // when physical dimensions happen to be unchanged.
         let dpi_changed = dpi != self.last_dpi;
-        let resize_needed = dpi_changed || self.last_physical_size != Some((width_px, height_px));
+        let resize_needed = dpi_changed
+            || session.geometry_sync_pending()
+            || self.last_physical_size != Some((width_px, height_px));
         if resize_needed {
             let dpi_ready = if dpi_changed {
                 match session.set_dpi(dpi) {

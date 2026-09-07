@@ -54,6 +54,10 @@ pub struct RenderSession {
     /// time value.
     base_font_size_px: Mutex<f32>,
     dpi: AtomicU32,
+    /// A live metrics change must be reconciled with VT and ConPTY geometry.
+    /// Kept explicit so a partial resize failure is retried by the next
+    /// prepaint instead of leaving the renderer and child process desynced.
+    geometry_sync_pending: AtomicBool,
     /// When a local user action mutates terminal state (typing, paste,
     /// mouse selection), the next render should prefer the freshest
     /// frame over the lowest-latency non-blocking staging drain. This
@@ -275,6 +279,7 @@ impl RenderSession {
             config: Mutex::new(renderer_config),
             base_font_size_px: Mutex::new(base_font_size_px),
             dpi: AtomicU32::new(current_dpi),
+            geometry_sync_pending: AtomicBool::new(false),
             low_latency_requested: AtomicBool::new(false),
             low_latency_generation_target: AtomicU64::new(0),
             low_latency_burst_until: Mutex::new(None),
@@ -365,6 +370,7 @@ impl RenderSession {
         self.conpty
             .resize(PtySize { cols, rows })
             .context("ConPty::resize failed")?;
+        self.geometry_sync_pending.store(false, Ordering::Release);
         log::debug!(
             "RenderSession::resize -> {width_px}x{height_px} grid={cols}x{rows} \
              cell={cell_width_px}x{cell_height_px}"
@@ -446,6 +452,7 @@ impl RenderSession {
             config.font_family = font_family.to_string();
             config.font_size_px = physical_size;
         }
+        self.geometry_sync_pending.store(true, Ordering::Release);
         // Renderer::resize is idempotent for unchanged pixel dimensions, but
         // this method still re-derives the grid from the new atlas metrics.
         self.resize(width, height)?;
@@ -454,6 +461,11 @@ impl RenderSession {
             "RenderSession::set_font family={font_family:?} logical_px={logical_size:.2} physical_px={physical_size:.2}"
         );
         Ok(())
+    }
+
+    /// Whether a metrics change still needs to reach VT and ConPTY.
+    pub fn geometry_sync_pending(&self) -> bool {
+        self.geometry_sync_pending.load(Ordering::Acquire)
     }
 
     /// Notify of a DPI change. Rebuilds the glyph atlas at the new

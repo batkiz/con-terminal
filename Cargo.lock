@@ -1398,6 +1398,7 @@ dependencies = [
  "portable-pty",
  "raw-window-handle",
  "serde_json",
+ "shell-words",
  "unicode-width",
  "uuid",
  "windows 0.61.3",

@@ -1,3 +1,4 @@
+use std::ffi::OsString;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -22,6 +23,9 @@ use crate::{
 #[derive(Debug, Clone)]
 pub struct LinuxBackendConfig {
     pub shell_program: Option<String>,
+    /// `None` means the auto-detected program should start as an interactive
+    /// login shell. `Some` is the exact argv from an explicit user command.
+    pub shell_args: Option<Vec<OsString>>,
     pub font_family: Option<String>,
     pub font_size: Option<f32>,
     pub colors: Option<TerminalColors>,
@@ -45,6 +49,7 @@ impl Default for LinuxBackendConfig {
     fn default() -> Self {
         Self {
             shell_program: None,
+            shell_args: None,
             font_family: None,
             font_size: None,
             colors: None,
@@ -81,13 +86,26 @@ impl LinuxGhosttyApp {
         _background_image_repeat: Option<bool>,
         clipboard_write: bool,
     ) -> Result<Self, String> {
+        let (shell_program, shell_args) = match shell.map(str::trim).filter(|s| !s.is_empty()) {
+            Some(shell) => {
+                let mut argv = shell_words::split(shell)
+                    .map_err(|error| format!("invalid terminal shell command: {error}"))?
+                    .into_iter();
+                let program = argv
+                    .next()
+                    .ok_or_else(|| "terminal shell command must name a program".to_string())?;
+                (
+                    Some(program),
+                    Some(argv.map(OsString::from).collect::<Vec<_>>()),
+                )
+            }
+            None => (default_linux_shell_program(), None),
+        };
+
         Ok(Self {
             config: Mutex::new(LinuxBackendConfig {
-                shell_program: shell
-                    .map(str::trim)
-                    .filter(|shell| !shell.is_empty())
-                    .map(ToOwned::to_owned)
-                    .or_else(default_linux_shell_program),
+                shell_program,
+                shell_args,
                 font_family: font_family.map(ToOwned::to_owned),
                 font_size,
                 colors: colors.cloned(),
@@ -168,9 +186,16 @@ impl LinuxGhosttyApp {
 
     pub fn default_pty_options(&self, cwd: Option<&std::path::Path>) -> LinuxPtyOptions {
         let config = self.backend_config();
+        let (program, command_program) = if config.shell_args.is_some() {
+            (None, config.shell_program.clone().map(OsString::from))
+        } else {
+            (config.shell_program.clone(), None)
+        };
         LinuxPtyOptions {
             cwd: cwd.map(PathBuf::from),
-            program: config.shell_program,
+            program,
+            command_program,
+            command_args: config.shell_args,
             wake_generation: Some(self.wake_generation.clone()),
             theme: config.colors,
             clipboard_write: config.clipboard_write,
@@ -178,6 +203,69 @@ impl LinuxGhosttyApp {
             desktop_notification_policy: self.desktop_notification_policy.clone(),
             ..LinuxPtyOptions::default()
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::LinuxGhosttyApp;
+
+    #[test]
+    fn configured_shell_preserves_quoted_arguments() {
+        let app = LinuxGhosttyApp::new(
+            None,
+            Some("/usr/bin/fish --init-command 'echo hello world'"),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            false,
+        )
+        .expect("valid shell command");
+
+        let options = app.default_pty_options(None);
+        assert_eq!(
+            options.command_program.as_deref(),
+            Some(std::ffi::OsStr::new("/usr/bin/fish"))
+        );
+        assert_eq!(
+            options.command_args.as_deref(),
+            Some(
+                ["--init-command", "echo hello world"]
+                    .map(std::ffi::OsString::from)
+                    .as_slice()
+            )
+        );
+        assert!(options.program.is_none());
+    }
+
+    #[test]
+    fn configured_shell_rejects_unclosed_quotes() {
+        let error = LinuxGhosttyApp::new(
+            None,
+            Some("/usr/bin/fish '"),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            false,
+        )
+        .err()
+        .expect("invalid shell command should fail");
+
+        assert!(error.contains("invalid terminal shell command"));
     }
 }
 

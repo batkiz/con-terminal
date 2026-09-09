@@ -652,6 +652,7 @@ impl GhosttyApp {
     pub fn update_colors(&self, colors: &TerminalColors) -> Result<(), String> {
         self.update_config(&GhosttyConfigPatch {
             colors: Some(colors.clone()),
+            shell: None,
             font_family: None,
             font_size: None,
             background_opacity: None,
@@ -683,6 +684,7 @@ impl GhosttyApp {
     ) -> Result<(), String> {
         self.update_config(&GhosttyConfigPatch {
             colors: Some(colors.clone()),
+            shell: None,
             font_family: Some(font_family.to_string()),
             font_size: Some(font_size),
             background_opacity: Some(background_opacity),
@@ -992,6 +994,7 @@ impl GhosttyTerminal {
     ) -> Result<(), String> {
         self.update_config(&GhosttyConfigPatch {
             colors: Some(colors.clone()),
+            shell: None,
             font_family: Some(font_family.to_string()),
             font_size: Some(font_size),
             background_opacity: Some(background_opacity),

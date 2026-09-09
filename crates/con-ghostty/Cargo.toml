@@ -67,4 +67,5 @@ unicode-width.workspace = true
 image = { version = "0.25", default-features = false, features = ["png"] }
 libc = "0.2"
 portable-pty = "0.9"
+shell-words = "1.1"
 uuid.workspace = true

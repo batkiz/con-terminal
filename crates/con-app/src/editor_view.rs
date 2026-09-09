@@ -8,6 +8,7 @@ use crate::{
     editor_buffer::{CursorPosition, EditorBuffer},
     editor_lsp::{self, EditorDiagnostic, LspClient, LspClientEvent},
     editor_preview, editor_syntax,
+    ui_scale::ui_icon_px,
 };
 use crossbeam_channel::{Receiver, Sender};
 use gpui::{
@@ -35,7 +36,6 @@ use std::{
 /// Unique-per-process id for `EditorView` instances, used to namespace GPUI
 /// element ids (multiple editor panes may show previews simultaneously).
 static NEXT_EDITOR_VIEW_ID: AtomicU64 = AtomicU64::new(1);
-use crate::ui_scale::ui_icon_px;
 
 const EDITOR_FONT_SIZE: f32 = 14.0;
 #[cfg_attr(not(test), allow(dead_code))]

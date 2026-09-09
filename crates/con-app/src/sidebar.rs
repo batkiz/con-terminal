@@ -16,8 +16,8 @@
 
 use crate::activity_bar::ActivitySlot;
 use crate::motion::MotionValue;
-use con_ghostty::TerminalProgress;
 use crate::ui_scale::ui_icon_px;
+use con_ghostty::TerminalProgress;
 use gpui::{
     AnyElement, App, Bounds, Context, Div, Entity, EventEmitter, FontWeight, Hsla,
     InteractiveElement, IntoElement, MouseButton, MouseDownEvent, ParentElement, Pixels, Point,

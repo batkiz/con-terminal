@@ -198,32 +198,6 @@ impl LinuxGhosttyApp {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::parse_configured_shell;
-
-    #[test]
-    fn configured_shell_preserves_quoted_arguments() {
-        let (program, args) =
-            parse_configured_shell("/usr/bin/fish --init-command 'echo hello world'")
-                .expect("valid shell command");
-
-        assert_eq!(program, "/usr/bin/fish");
-        assert_eq!(
-            args,
-            ["--init-command", "echo hello world"].map(std::ffi::OsString::from)
-        );
-    }
-
-    #[test]
-    fn configured_shell_rejects_unclosed_quotes() {
-        let error = parse_configured_shell("/usr/bin/fish '")
-            .expect_err("invalid shell command should fail");
-
-        assert!(error.contains("invalid terminal shell command"));
-    }
-}
-
 unsafe impl Send for LinuxGhosttyApp {}
 unsafe impl Sync for LinuxGhosttyApp {}
 
@@ -793,7 +767,28 @@ fn sgr_mouse_sequence(button: u8, col: u16, row: u16, pressed: bool) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::sgr_mouse_sequence;
+    use super::{parse_configured_shell, sgr_mouse_sequence};
+
+    #[test]
+    fn configured_shell_preserves_quoted_arguments() {
+        let (program, args) =
+            parse_configured_shell("/usr/bin/fish --init-command 'echo hello world'")
+                .expect("valid shell command");
+
+        assert_eq!(program, "/usr/bin/fish");
+        assert_eq!(
+            args,
+            ["--init-command", "echo hello world"].map(std::ffi::OsString::from)
+        );
+    }
+
+    #[test]
+    fn configured_shell_rejects_unclosed_quotes() {
+        let error = parse_configured_shell("/usr/bin/fish '")
+            .expect_err("invalid shell command should fail");
+
+        assert!(error.contains("invalid terminal shell command"));
+    }
 
     #[test]
     fn sgr_right_press_uses_button_2_and_one_based_coords() {

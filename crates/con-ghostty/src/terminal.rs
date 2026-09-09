@@ -77,6 +77,7 @@ pub struct GhosttyConfigPatch {
     pub colors: Option<TerminalColors>,
     pub shell: Option<String>,
     pub font_family: Option<String>,
+    pub font_fallback: Option<Vec<String>>,
     pub font_size: Option<f32>,
     pub background_opacity: Option<f32>,
     pub background_opacity_cells: Option<bool>,
@@ -100,6 +101,9 @@ impl GhosttyConfigPatch {
         }
         if let Some(font_family) = &patch.font_family {
             self.font_family = Some(font_family.clone());
+        }
+        if let Some(font_fallback) = &patch.font_fallback {
+            self.font_fallback = Some(font_fallback.clone());
         }
         if let Some(font_size) = patch.font_size {
             self.font_size = Some(font_size);
@@ -148,6 +152,24 @@ impl GhosttyConfigPatch {
             let font_family = sanitize_font_family_for_ghostty(font_family);
             s.push_str("font-family = \"\"\n");
             s.push_str(&format!("font-family = {:?}\n", font_family));
+            let primary_is_bundled = font_family.eq_ignore_ascii_case(DEFAULT_GHOSTTY_FONT_FAMILY);
+            if let Some(font_fallback) = &self.font_fallback {
+                for family in font_fallback {
+                    let family = sanitize_font_family_for_ghostty(family);
+                    if family.eq_ignore_ascii_case(DEFAULT_GHOSTTY_FONT_FAMILY) {
+                        continue;
+                    }
+                    if !family.eq_ignore_ascii_case(font_family) {
+                        s.push_str(&format!("font-family = {:?}\n", family));
+                    }
+                }
+            }
+            if !primary_is_bundled {
+                s.push_str(&format!(
+                    "font-family = {:?}\n",
+                    DEFAULT_GHOSTTY_FONT_FAMILY
+                ));
+            }
         }
         if let Some(font_size) = self.font_size {
             s.push_str(&format!("font-size = {:.2}\n", font_size));
@@ -549,6 +571,7 @@ impl GhosttyApp {
         colors: Option<&TerminalColors>,
         shell: Option<&str>,
         font_family: Option<&str>,
+        font_fallback: Option<&[String]>,
         font_size: Option<f32>,
         background_opacity: Option<f32>,
         background_blur: Option<bool>,
@@ -566,6 +589,7 @@ impl GhosttyApp {
             colors: colors.cloned(),
             shell: shell.map(ToOwned::to_owned),
             font_family: font_family.map(ToOwned::to_owned),
+            font_fallback: font_fallback.map(ToOwned::to_owned),
             font_size,
             background_opacity,
             background_opacity_cells: background_opacity.map(|opacity| opacity < 0.999),
@@ -654,6 +678,7 @@ impl GhosttyApp {
             colors: Some(colors.clone()),
             shell: None,
             font_family: None,
+            font_fallback: None,
             font_size: None,
             background_opacity: None,
             background_opacity_cells: None,
@@ -672,6 +697,7 @@ impl GhosttyApp {
         &self,
         colors: &TerminalColors,
         font_family: &str,
+        font_fallback: &[String],
         font_size: f32,
         background_opacity: f32,
         background_blur: bool,
@@ -686,6 +712,7 @@ impl GhosttyApp {
             colors: Some(colors.clone()),
             shell: None,
             font_family: Some(font_family.to_string()),
+            font_fallback: Some(font_fallback.to_vec()),
             font_size: Some(font_size),
             background_opacity: Some(background_opacity),
             background_opacity_cells: Some(background_opacity < 0.999),
@@ -982,6 +1009,7 @@ impl GhosttyTerminal {
         &self,
         colors: &TerminalColors,
         font_family: &str,
+        font_fallback: &[String],
         font_size: f32,
         background_opacity: f32,
         background_blur: bool,
@@ -996,6 +1024,7 @@ impl GhosttyTerminal {
             colors: Some(colors.clone()),
             shell: None,
             font_family: Some(font_family.to_string()),
+            font_fallback: Some(font_fallback.to_vec()),
             font_size: Some(font_size),
             background_opacity: Some(background_opacity),
             background_opacity_cells: Some(background_opacity < 0.999),
@@ -2150,6 +2179,49 @@ mod tests {
                 .to_config_string()
                 .contains("command = \"/opt/homebrew/bin/fish -l\"")
         );
+    }
+
+    #[test]
+    fn ghostty_config_preserves_fallback_order_and_appends_bundled_font() {
+        let patch = GhosttyConfigPatch {
+            font_family: Some("JetBrains Mono".to_string()),
+            font_fallback: Some(vec![
+                "Sarasa Mono SC".to_string(),
+                "Ioskeley Mono".to_string(),
+                "Segoe UI Emoji".to_string(),
+            ]),
+            ..Default::default()
+        };
+
+        let font_lines = patch
+            .to_config_string()
+            .lines()
+            .filter(|line| line.starts_with("font-family ="))
+            .map(str::to_string)
+            .collect::<Vec<_>>();
+        assert_eq!(
+            font_lines,
+            vec![
+                "font-family = \"\"",
+                "font-family = \"JetBrains Mono\"",
+                "font-family = \"Sarasa Mono SC\"",
+                "font-family = \"Segoe UI Emoji\"",
+                "font-family = \"Ioskeley Mono\"",
+            ]
+        );
+    }
+
+    #[test]
+    fn config_patch_merge_can_clear_font_fallbacks() {
+        let mut patch = GhosttyConfigPatch {
+            font_fallback: Some(vec!["Sarasa Mono SC".to_string()]),
+            ..Default::default()
+        };
+        patch.merge(&GhosttyConfigPatch {
+            font_fallback: Some(Vec::new()),
+            ..Default::default()
+        });
+        assert_eq!(patch.font_fallback, Some(Vec::new()));
     }
 
     #[test]

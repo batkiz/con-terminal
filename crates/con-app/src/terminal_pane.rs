@@ -119,6 +119,7 @@ impl TerminalPane {
         theme: &TerminalTheme,
         colors: &TerminalColors,
         font_family: &str,
+        font_fallback: &[String],
         font_size: f32,
         background_opacity: f32,
         background_blur: bool,
@@ -135,6 +136,7 @@ impl TerminalPane {
             if let Err(err) = terminal.update_appearance(
                 colors,
                 font_family,
+                font_fallback,
                 font_size,
                 background_opacity,
                 background_blur,

@@ -29,6 +29,7 @@ image = { version = "0.25", default-features = false, features = ["png"] }
 # See docs/impl/windows-port.md for the staged plan.
 windows = { version = "0.61", features = [
     "Win32_Foundation",
+    "Win32_Globalization",             # User locale for regional CJK glyph fallback
     "Win32_System_Console",             # ConPTY: CreatePseudoConsole etc.
     "Win32_System_Threading",           # CreateProcessW, STARTUPINFOEXW
     "Win32_System_Pipes",               # CreatePipe (ConPTY I/O)

@@ -16,6 +16,13 @@ con is still pre-release, so entries may group related beta work while the produ
   [#350](https://github.com/nowledge-co/con-terminal/pull/350) by
   [@batkiz](https://github.com/batkiz))_
 
+- Terminal fonts can now use an ordered fallback list, so CJK text, symbols,
+  emoji, and prompt icons resolve predictably without replacing the primary
+  monospace font. The setting is available under Appearance > Fonts and is
+  applied consistently on macOS, Windows, and Linux. _(PR
+  [#348](https://github.com/nowledge-co/con-terminal/pull/348) by
+  [@batkiz](https://github.com/batkiz))_
+
 ---
 
 ## `v0.1.0-beta.96` - 2026-09-07

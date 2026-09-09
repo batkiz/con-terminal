@@ -542,11 +542,13 @@ impl GhosttyView {
 
         let cwd = self.initial_cwd.as_deref().map(std::path::PathBuf::from);
         let initial_output = restored_terminal_output(self.restored_screen_text.as_deref());
+        let shell = self.app.shell_command();
         match RenderSession::new(
             width_px,
             height_px,
             dpi,
             config,
+            shell,
             cwd,
             initial_output,
             self.app.clipboard_write_enabled(),

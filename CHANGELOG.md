@@ -4,6 +4,20 @@ All notable changes to con are documented here.
 
 con is still pre-release, so entries may group related beta work while the product shape is stabilizing.
 
+## `v0.1.0-beta.97` - unreleased
+
+### Added
+
+**Terminal**
+
+- New panes can now start with a shell command chosen in Settings, while an
+  empty setting continues to follow the platform default. Commands with
+  arguments and quoted paths are supported. _(PR
+  [#350](https://github.com/nowledge-co/con-terminal/pull/350) by
+  [@batkiz](https://github.com/batkiz))_
+
+---
+
 ## `v0.1.0-beta.96` - 2026-09-07
 
 ### Changed

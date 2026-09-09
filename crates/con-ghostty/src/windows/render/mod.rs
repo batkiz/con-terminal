@@ -88,6 +88,21 @@ pub struct RendererConfig {
     pub theme: Option<ThemeColors>,
 }
 
+impl RendererConfig {
+    /// Apply a terminal color theme, keeping `clear_color`
+    /// and the VT palette in agreement. Call this whenever the user
+    /// switches themes; also call `VtScreen::set_theme` for an existing session.
+    pub fn apply_theme(&mut self, theme: &ThemeColors) {
+        self.clear_color = [
+            theme.bg[0] as f32 / 255.0,
+            theme.bg[1] as f32 / 255.0,
+            theme.bg[2] as f32 / 255.0,
+            1.0,
+        ];
+        self.theme = Some(theme.clone());
+    }
+}
+
 impl Default for RendererConfig {
     fn default() -> Self {
         Self {

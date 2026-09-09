@@ -39,7 +39,7 @@ use windows::Win32::Graphics::DirectWrite::{
     DWRITE_LINE_METRICS, DWRITE_MEASURING_MODE_NATURAL, DWRITE_PIXEL_GEOMETRY_FLAT,
     DWRITE_RENDERING_MODE_NATURAL_SYMMETRIC, IDWriteFactory, IDWriteFactory1,
     IDWriteFontCollection, IDWriteFontFace, IDWriteFontFallback, IDWriteRenderingParams,
-    IDWriteTextFormat, IDWriteTextFormat1,
+    IDWriteRenderingParams1, IDWriteTextFormat, IDWriteTextFormat1,
 };
 use windows::Win32::Graphics::Dxgi::Common::{DXGI_FORMAT_B8G8R8A8_UNORM, DXGI_SAMPLE_DESC};
 use windows::Win32::Graphics::Dxgi::IDXGISurface;
@@ -48,6 +48,9 @@ use windows_numerics::Matrix3x2;
 
 const LOCALE_NAME_BUFFER_LENGTH: usize = 85;
 const FALLBACK_LOCALE_NAME: &str = "en-US";
+const DEFAULT_TEXT_GAMMA: f32 = 1.8;
+const DEFAULT_GRAYSCALE_CONTRAST: f32 = 1.0;
+const CJK_GRAYSCALE_CONTRAST_FLOOR: f32 = 1.45;
 
 static USER_LOCALE_NAME: LazyLock<Vec<u16>> = LazyLock::new(user_locale_name);
 
@@ -110,6 +113,24 @@ pub struct CellMetrics {
     pub cell_width_px: u32,
     pub cell_height_px: u32,
     pub baseline_px: u32,
+}
+
+/// DirectWrite's color-dependent grayscale correction inputs. The atlas keeps
+/// reusable coverage; the final text pass applies these values after the real
+/// foreground color is known.
+#[derive(Debug, Clone, Copy)]
+pub(super) struct GlyphRenderingParams {
+    pub gamma_ratios: [f32; 4],
+    pub grayscale_contrast: f32,
+    pub cjk_grayscale_contrast: f32,
+}
+
+impl GlyphRenderingParams {
+    const LEGACY_ATLAS: Self = Self {
+        gamma_ratios: [0.0; 4],
+        grayscale_contrast: 0.0,
+        cjk_grayscale_contrast: 0.0,
+    };
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -176,7 +197,8 @@ pub struct GlyphCache {
     /// Linear grayscale rasterization parameters. The atlas stores neutral
     /// coverage; foreground-aware gamma and contrast correction happens in
     /// the pixel shader when the actual text color is known.
-    _linear_text_rendering_params: IDWriteRenderingParams,
+    _text_rendering_params: Option<IDWriteRenderingParams>,
+    rendering_params: GlyphRenderingParams,
     white_brush: ID2D1SolidColorBrush,
     /// Opaque-black brush. Used to clear each slot before `DrawText` so
     /// any stale pixels — from a neighbouring scaled-PUA glyph that bled
@@ -410,14 +432,15 @@ impl GlyphCache {
         // every glyph, then incorrectly reuse those values for dark text on
         // light themes. The pixel shader applies DirectWrite-compatible,
         // foreground-aware correction when it knows the real colors.
-        let linear_text_rendering_params = linear_text_rendering_params(dwrite)
-            .context("creating linear DirectWrite rendering parameters failed")?;
+        let (text_rendering_params, rendering_params) = text_rendering_params(dwrite);
         // SAFETY: grayscale AA. Setting the mode is cheap; if a driver
         // clamps it, the shader still collapses coverage to one scalar
         // so colored subpixel fringe cannot escape to the final frame.
         unsafe {
             d2d_rt.SetTextAntialiasMode(D2D1_TEXT_ANTIALIAS_MODE_GRAYSCALE);
-            d2d_rt.SetTextRenderingParams(&linear_text_rendering_params);
+            if let Some(params) = text_rendering_params.as_ref() {
+                d2d_rt.SetTextRenderingParams(params);
+            }
         }
 
         let color = D2D1_COLOR_F {
@@ -472,7 +495,8 @@ impl GlyphCache {
             _atlas_texture: atlas_texture,
             atlas_srv,
             d2d_rt,
-            _linear_text_rendering_params: linear_text_rendering_params,
+            _text_rendering_params: text_rendering_params,
+            rendering_params,
             white_brush,
             black_brush,
             allocator,
@@ -504,6 +528,10 @@ impl GlyphCache {
     #[allow(dead_code)] // used once atlas-grow lands.
     pub fn atlas_size(&self) -> u32 {
         self.atlas_size
+    }
+
+    pub fn rendering_params(&self) -> GlyphRenderingParams {
+        self.rendering_params
     }
 
     /// Return the glyph rect for a (codepoint, style) key, rasterizing
@@ -1073,29 +1101,114 @@ fn make_text_format_with_weight(
     Ok(format)
 }
 
-fn linear_text_rendering_params(dwrite: &IDWriteFactory) -> Result<IDWriteRenderingParams> {
-    // Factory1 exposes a separate grayscale-enhanced-contrast argument. Set
-    // gamma and both contrast channels to their neutral values so DrawText
-    // writes reusable coverage instead of white-on-black corrected coverage.
-    // ClearType remains disabled because this offscreen texture is later
-    // sampled, scaled, and composited over transparent backgrounds.
+fn text_rendering_params(
+    dwrite: &IDWriteFactory,
+) -> (Option<IDWriteRenderingParams>, GlyphRenderingParams) {
+    match foreground_aware_text_rendering_params(dwrite) {
+        Ok(params) => params,
+        Err(error) => {
+            // Windows 10+ exposes IDWriteFactory1, but preserve a usable
+            // terminal if a remote/compatibility environment rejects it. In
+            // that case DirectWrite bakes correction into the atlas and the
+            // shader's identity parameters avoid correcting it twice.
+            log::warn!(
+                "foreground-aware DirectWrite correction unavailable ({error:#}); using legacy atlas correction"
+            );
+            let legacy = unsafe {
+                dwrite.CreateCustomRenderingParams(
+                    DEFAULT_TEXT_GAMMA,
+                    1.15,
+                    0.0,
+                    DWRITE_PIXEL_GEOMETRY_FLAT,
+                    DWRITE_RENDERING_MODE_NATURAL_SYMMETRIC,
+                )
+            }
+            .ok();
+            (legacy, GlyphRenderingParams::LEGACY_ATLAS)
+        }
+    }
+}
+
+fn foreground_aware_text_rendering_params(
+    dwrite: &IDWriteFactory,
+) -> Result<(Option<IDWriteRenderingParams>, GlyphRenderingParams)> {
+    // This follows Windows Terminal's AtlasEngine contract: read the user's
+    // DirectWrite parameters once, rasterize neutral grayscale coverage, and
+    // defer color-dependent gamma/contrast correction to the pixel shader.
     let factory = dwrite
         .cast::<IDWriteFactory1>()
         .context("IDWriteFactory1 is unavailable")?;
+    let defaults = unsafe { factory.CreateRenderingParams() }
+        .context("IDWriteFactory1::CreateRenderingParams failed")?;
+    let defaults_v1 = defaults
+        .cast::<IDWriteRenderingParams1>()
+        .context("IDWriteRenderingParams1 is unavailable")?;
+
+    let gamma = finite_or(unsafe { defaults.GetGamma() }, DEFAULT_TEXT_GAMMA).clamp(1.0, 2.2);
+    let grayscale_contrast = finite_or(
+        unsafe { defaults_v1.GetGrayscaleEnhancedContrast() },
+        DEFAULT_GRAYSCALE_CONTRAST,
+    )
+    .max(0.0);
     let params = unsafe {
         factory.CreateCustomRenderingParams(
             1.0,
             0.0,
             0.0,
-            0.0,
-            DWRITE_PIXEL_GEOMETRY_FLAT,
-            DWRITE_RENDERING_MODE_NATURAL_SYMMETRIC,
+            defaults.GetClearTypeLevel(),
+            defaults.GetPixelGeometry(),
+            defaults.GetRenderingMode(),
         )
     }
     .context("IDWriteFactory1::CreateCustomRenderingParams failed")?;
-    params
+    let params = params
         .cast::<IDWriteRenderingParams>()
-        .context("IDWriteRenderingParams1 -> IDWriteRenderingParams failed")
+        .context("IDWriteRenderingParams1 -> IDWriteRenderingParams failed")?;
+
+    Ok((
+        Some(params),
+        GlyphRenderingParams {
+            gamma_ratios: gamma_ratios(gamma),
+            grayscale_contrast,
+            cjk_grayscale_contrast: grayscale_contrast.max(CJK_GRAYSCALE_CONTRAST_FLOOR),
+        },
+    ))
+}
+
+fn finite_or(value: f32, fallback: f32) -> f32 {
+    if value.is_finite() { value } else { fallback }
+}
+
+/// Polynomial coefficients used by DirectWrite's grayscale alpha correction.
+/// The source table and normalization are from Windows Terminal's
+/// MIT-licensed `dwrite_helpers.cpp`.
+fn gamma_ratios(gamma: f32) -> [f32; 4] {
+    const TARGETS: [[f32; 4]; 13] = [
+        [0.0000, 0.0000, 0.0000, 0.0000],
+        [0.0166, -0.0807, 0.2227, -0.0751],
+        [0.0350, -0.1760, 0.4325, -0.1370],
+        [0.0543, -0.2821, 0.6302, -0.1876],
+        [0.0739, -0.3963, 0.8167, -0.2287],
+        [0.0933, -0.5161, 0.9926, -0.2616],
+        [0.1121, -0.6395, 1.1588, -0.2877],
+        [0.1300, -0.7649, 1.3159, -0.3080],
+        [0.1469, -0.8911, 1.4644, -0.3234],
+        [0.1627, -1.0170, 1.6051, -0.3347],
+        [0.1773, -1.1420, 1.7385, -0.3426],
+        [0.1908, -1.2652, 1.8650, -0.3476],
+        [0.2031, -1.3864, 1.9851, -0.3501],
+    ];
+    let index =
+        ((finite_or(gamma, DEFAULT_TEXT_GAMMA) * 10.0 + 0.5) as i32).clamp(10, 22) as usize - 10;
+    let target = TARGETS[index];
+    let norm_13 = 65_536.0 / (255.0 * 255.0);
+    let norm_24 = 256.0 / 255.0;
+    [
+        target[0] * norm_13,
+        target[1] * norm_24,
+        target[2] * norm_13,
+        target[3] * norm_24,
+    ]
 }
 
 fn text_layout_baseline(
@@ -1437,7 +1550,16 @@ pub(super) fn is_cjk_codepoint(codepoint: u32) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{is_cjk_codepoint, is_wide_codepoint};
+    use super::{gamma_ratios, is_cjk_codepoint, is_wide_codepoint};
+
+    #[test]
+    fn gamma_ratios_match_directwrite_default() {
+        let actual = gamma_ratios(1.8);
+        let expected = [0.148054421, -0.894594550, 1.47590804, -0.324668258];
+        for (actual, expected) in actual.into_iter().zip(expected) {
+            assert!((actual - expected).abs() < 0.000_001);
+        }
+    }
 
     #[test]
     fn wide_codepoint_follows_unicode_width() {

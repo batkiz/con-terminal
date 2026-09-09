@@ -1069,6 +1069,7 @@ impl Renderer {
         let background_instance_count = instances.len() as u32 - text_instance_count;
 
         let metrics = atlas.metrics();
+        let rendering_params = atlas.rendering_params();
         let atlas_size = atlas.atlas_size() as f32;
         let atlas_srv = atlas.atlas_srv().clone();
         drop(atlas);
@@ -1102,6 +1103,10 @@ impl Renderer {
             grid_cols: snapshot.cols as u32,
             grid_rows: snapshot.rows as u32,
             inv_atlas_size: [1.0 / atlas_size, 1.0 / atlas_size],
+            gamma_ratios: rendering_params.gamma_ratios,
+            grayscale_contrast: rendering_params.grayscale_contrast,
+            cjk_grayscale_contrast: rendering_params.cjk_grayscale_contrast,
+            _padding: [0.0; 2],
         };
         pipeline
             .upload_globals(&self.context, &globals)
@@ -1858,7 +1863,6 @@ fn create_staging_texture(
 mod tests {
     use super::{Renderer, RendererConfig};
     use std::sync::Arc;
-    use super::{Renderer, RendererConfig};
 
     use super::{
         KittyReadbackState, KittyVisual, KittyVisualState, ReadbackRegion, merge_readback_regions,

@@ -12,11 +12,12 @@ That bakes a white-on-black assumption into the atlas. DirectWrite grayscale cor
 
 ## Fix applied
 
-- Rasterize the Direct2D atlas with neutral gamma and contrast through `IDWriteFactory1` while retaining grayscale antialiasing.
-- Apply DirectWrite-compatible, foreground-aware gamma and grayscale contrast correction in the pixel shader, based on Windows Terminal's MIT-licensed AtlasEngine formulas.
+- Read the active DirectWrite gamma and grayscale contrast once at renderer startup, then rasterize the Direct2D atlas with neutral gamma and contrast through `IDWriteFactory1` while retaining grayscale antialiasing.
+- Apply DirectWrite-compatible, foreground-aware gamma and grayscale contrast correction in the pixel shader, based on Windows Terminal's MIT-licensed AtlasEngine formulas. The shader receives the system-derived values rather than assuming the default text tuner settings.
 - Preserve a separate CJK contrast profile through a renderer-private instance attribute while keeping the existing medium-weight CJK format.
 - Mark zero-sized atlas instances as glyph-free in the vertex shader so the pixel shader forces their glyph coverage to zero.
-- Add a test that compiles both embedded HLSL entry points.
+- Fall back to the previous atlas-corrected path if the newer DirectWrite interface is unexpectedly unavailable, so rendering quality can degrade without preventing a terminal pane from opening.
+- Add tests for the DirectWrite gamma coefficients, renderer initialization, and every embedded HLSL entry point.
 
 ## What we learned
 

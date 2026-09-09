@@ -17,6 +17,10 @@ cbuffer Globals : register(b0) {
     uint   gridCols;
     uint   gridRows;
     float2 invAtlasSize;
+    float4 gammaRatios;
+    float  grayscaleContrast;
+    float  cjkGrayscaleContrast;
+    float2 globalsPadding;
 };
 
 struct VSInstance {
@@ -66,13 +70,6 @@ float enhanceContrast(float alpha, float contrast) {
 }
 
 float applyAlphaCorrection(float alpha, float foregroundIntensity) {
-    // Polynomial ratios for DirectWrite's default gamma 1.8.
-    const float4 gammaRatios = float4(
-        0.148054421,
-       -0.894594550,
-        1.47590804,
-       -0.324668258
-    );
     return alpha + alpha * (1.0 - alpha)
         * ((gammaRatios.x * foregroundIntensity + gammaRatios.y) * alpha
             + (gammaRatios.z * foregroundIntensity + gammaRatios.w));
@@ -205,7 +202,9 @@ float4 ps_text(VSOut i) : SV_Target {
     }
 
     float coverage = correctedGrayscaleCoverage(
-        rawCoverage, color.rgb, (i.attrs & 1024u) != 0u ? 1.45 : 1.0
+        rawCoverage,
+        color.rgb,
+        (i.attrs & 1024u) != 0u ? cjkGrayscaleContrast : grayscaleContrast
     );
     float alpha = color.a * max(coverage, bandCoverage);
     return float4(color.rgb * alpha, alpha);

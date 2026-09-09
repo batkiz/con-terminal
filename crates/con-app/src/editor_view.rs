@@ -8,6 +8,7 @@ use crate::{
     editor_buffer::{CursorPosition, EditorBuffer},
     editor_lsp::{self, EditorDiagnostic, LspClient, LspClientEvent},
     editor_preview, editor_syntax,
+    ui_scale::ui_icon_px,
 };
 use crossbeam_channel::{Receiver, Sender};
 use gpui::{
@@ -1843,7 +1844,7 @@ impl Render for EditorView {
                     .child(
                         svg()
                             .path("phosphor/x.svg")
-                            .size(px(8.0))
+                            .size(ui_icon_px(&theme, 8.0))
                             .text_color(fg.opacity(if is_active { 0.55 } else { 0.42 })),
                     ),
             );

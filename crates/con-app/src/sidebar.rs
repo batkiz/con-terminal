@@ -16,6 +16,7 @@
 
 use crate::activity_bar::ActivitySlot;
 use crate::motion::MotionValue;
+use crate::ui_scale::ui_icon_px;
 use con_ghostty::TerminalProgress;
 use gpui::{
     AnyElement, App, Bounds, Context, Div, Entity, EventEmitter, FontWeight, Hsla,
@@ -212,7 +213,7 @@ impl Render for DraggedTab {
             .child(
                 svg()
                     .path(self.icon)
-                    .size(px(12.0))
+                    .size(ui_icon_px(theme, 12.0))
                     .flex_shrink_0()
                     .text_color(theme.foreground),
             )
@@ -591,7 +592,7 @@ impl SessionSidebar {
                 .child(
                     svg()
                         .path(preview.icon)
-                        .size(px(12.0))
+                        .size(ui_icon_px(theme, 12.0))
                         .flex_shrink_0()
                         .text_color(theme.foreground),
                 )
@@ -1073,7 +1074,7 @@ impl SessionSidebar {
                 .child(
                     svg()
                         .path(session.icon)
-                        .size(px(16.0))
+                        .size(ui_icon_px(theme, 16.0))
                         .flex_shrink_0()
                         .text_color(if is_active {
                             theme.foreground
@@ -1653,7 +1654,7 @@ impl SessionSidebar {
         let mut icon_stack = div().relative().flex_shrink_0().child(
             svg()
                 .path(session.icon)
-                .size(px(15.0))
+                .size(ui_icon_px(theme, 15.0))
                 .text_color(if is_active {
                     theme.foreground
                 } else {
@@ -2090,7 +2091,7 @@ where
         .child(
             svg()
                 .path(icon)
-                .size(px(14.0))
+                .size(ui_icon_px(theme, 14.0))
                 .flex_shrink_0()
                 .text_color(icon_color),
         )
@@ -2231,7 +2232,7 @@ where
         .child(
             svg()
                 .path(icon)
-                .size(px(11.0))
+                .size(ui_icon_px(theme, 11.0))
                 .flex_shrink_0()
                 .text_color(theme.muted_foreground.opacity(0.72)),
         )

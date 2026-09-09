@@ -42,6 +42,7 @@ use crate::terminal_paste::{
 };
 use crate::terminal_restore::key_down_may_write_terminal;
 use crate::terminal_url::{Osc8UrlDecision, Osc8UrlDenial, evaluate_osc8_url};
+use crate::ui_scale::mono_icon_px;
 
 // Actions owned by the embedded terminal view.
 actions!(ghostty, [ConsumeTab, ConsumeTabPrev]);
@@ -223,7 +224,7 @@ fn osc8_link_preview_card(
                 } else {
                     "phosphor/shield-warning-fill.svg"
                 })
-                .size(px(12.0))
+                .size(mono_icon_px(theme, 12.0))
                 .text_color(accent),
         )
         .child(

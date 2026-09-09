@@ -22,6 +22,8 @@ use gpui_component::{ActiveTheme, tooltip::Tooltip};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+use crate::ui_scale::ui_icon_px;
+
 const ROW_HEIGHT: f32 = 24.0;
 const INDENT_PER_LEVEL: f32 = 12.0;
 const ICON_SIZE: f32 = 13.0;
@@ -357,7 +359,7 @@ impl Render for FileTreeView {
                         .child(if let Some(disclosure_icon) = disclosure_icon {
                             svg()
                                 .path(disclosure_icon)
-                                .size(px(10.0))
+                                .size(ui_icon_px(&list_theme, 10.0))
                                 .flex_shrink_0()
                                 .text_color(list_theme.muted_foreground.opacity(0.62))
                                 .into_any_element()
@@ -367,7 +369,7 @@ impl Render for FileTreeView {
                         .child(
                             svg()
                                 .path(icon)
-                                .size(px(ICON_SIZE))
+                                .size(ui_icon_px(&list_theme, ICON_SIZE))
                                 .flex_shrink_0()
                                 .text_color(icon_color),
                         )
@@ -392,7 +394,7 @@ impl Render for FileTreeView {
                                     .flex()
                                     .items_center()
                                     .justify_center()
-                                    .size(px(ICON_SIZE))
+                                    .size(ui_icon_px(&list_theme, ICON_SIZE))
                                     .flex_shrink_0()
                                     .cursor_pointer()
                                     .opacity(if is_active { 0.4 } else { 0.0 })
@@ -416,7 +418,7 @@ impl Render for FileTreeView {
                                     .child(
                                         svg()
                                             .path("phosphor/arrow-square-out.svg")
-                                            .size(px(ICON_SIZE))
+                                            .size(ui_icon_px(&list_theme, ICON_SIZE))
                                             .text_color(list_theme.muted_foreground),
                                     )
                                     .into_any_element()

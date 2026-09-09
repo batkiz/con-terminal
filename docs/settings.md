@@ -60,6 +60,10 @@ Appearance controls the parts of con you look at all day:
 Start with readability. Pick a theme with clear contrast, then adjust opacity or
 blur only if the terminal remains easy to scan.
 
+UI and terminal font sizes also scale the icons beside their text. Icon growth
+is intentionally bounded, so larger type remains balanced in narrow panes and
+compact window chrome.
+
 Use **Add Fallback** when the primary terminal font does not cover CJK, emoji,
 or symbols. Fallbacks are searched in the displayed order; use the arrow buttons
 to reorder them and the trash button to remove one. Con always keeps its bundled

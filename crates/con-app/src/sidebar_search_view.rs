@@ -1,6 +1,7 @@
 //! Sidebar search panel — searches files below the active sidebar root.
 
 use crate::file_tree_view::OpenFile;
+use crate::ui_scale::ui_icon_px;
 use gpui::{
     Context, Div, Entity, EventEmitter, IntoElement, MouseButton, MouseDownEvent, ParentElement,
     Render, ScrollHandle, SharedString, StatefulInteractiveElement, Styled, StyledText, TextStyle,
@@ -342,7 +343,7 @@ impl Render for SidebarSearchView {
                             .child(
                                 svg()
                                     .path("phosphor/file-text.svg")
-                                    .size(px(13.0))
+                                    .size(ui_icon_px(theme, 13.0))
                                     .flex_shrink_0()
                                     .text_color(theme.muted_foreground.opacity(0.72)),
                             )
@@ -437,7 +438,7 @@ impl Render for SidebarSearchView {
                             .child(
                                 svg()
                                     .path("phosphor/magnifying-glass.svg")
-                                    .size(px(13.0))
+                                    .size(ui_icon_px(theme, 13.0))
                                     .flex_shrink_0()
                                     .text_color(theme.muted_foreground.opacity(0.72)),
                             )

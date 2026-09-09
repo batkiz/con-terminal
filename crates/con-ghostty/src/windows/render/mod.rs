@@ -109,7 +109,7 @@ impl Default for RendererConfig {
             font_size_px: 14.0,
             initial_width: 800,
             initial_height: 600,
-            clear_color: [16.0 / 255.0, 15.0 / 255.0, 15.0 / 255.0, 1.0],
+            clear_color: [0.06, 0.06, 0.07, 1.0],
             background_opacity: 1.0,
             theme: None,
         }

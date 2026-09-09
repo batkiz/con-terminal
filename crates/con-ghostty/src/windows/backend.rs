@@ -65,13 +65,7 @@ impl WindowsGhosttyApp {
         }
         if let Some(colors) = colors {
             let theme = theme_from_colors(colors);
-            config.clear_color = [
-                colors.background[0] as f32 / 255.0,
-                colors.background[1] as f32 / 255.0,
-                colors.background[2] as f32 / 255.0,
-                1.0,
-            ];
-            config.theme = Some(theme);
+            config.apply_theme(&theme);
         }
         if let Some(op) = background_opacity {
             config.background_opacity = clamp_opacity(op);

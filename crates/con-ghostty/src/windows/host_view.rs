@@ -399,13 +399,7 @@ impl RenderSession {
             // palette would leave the border showing the previous
             // theme's background. Mirror what `WindowsGhosttyApp::
             // update_appearance` does at session construction.
-            config.clear_color = [
-                theme.bg[0] as f32 / 255.0,
-                theme.bg[1] as f32 / 255.0,
-                theme.bg[2] as f32 / 255.0,
-                1.0,
-            ];
-            config.theme = Some(theme.clone());
+            config.apply_theme(theme);
             // `set_theme` bumps the VT generation itself, so the next
             // prepaint re-runs draw_cells with the new palette + new
             // clear_color + any new opacity.

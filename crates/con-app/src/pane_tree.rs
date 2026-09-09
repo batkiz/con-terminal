@@ -2254,7 +2254,7 @@ impl PaneTree {
             .child(
                 svg()
                     .path(zoom_icon)
-                    .size(mono_icon_px(theme, 12.0))
+                    .size(mono_icon_px(theme, 11.0))
                     .text_color(btn_color),
             );
 
@@ -2281,7 +2281,7 @@ impl PaneTree {
                     .child(
                         svg()
                             .path("phosphor/x.svg")
-                            .size(mono_icon_px(theme, 12.0))
+                            .size(mono_icon_px(theme, 11.0))
                             .text_color(btn_color),
                     ),
             )
@@ -2680,7 +2680,7 @@ impl PaneTree {
                             .child(
                                 svg()
                                     .path("phosphor/x.svg")
-                                    .size(mono_icon_px(theme, 9.0))
+                                    .size(mono_icon_px(theme, 8.0))
                                     .text_color(if is_active {
                                         theme.foreground.opacity(0.62)
                                     } else {

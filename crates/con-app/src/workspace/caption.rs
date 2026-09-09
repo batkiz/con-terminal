@@ -149,7 +149,7 @@ pub(super) fn caption_buttons(
             .child(
                 svg()
                     .path(icon)
-                    .size(ui_icon_px(theme, 12.0))
+                    .size(ui_icon_px(theme, 10.0))
                     .text_color(fg)
                     .group_hover(id, move |s| s.text_color(hover_fg)),
             );

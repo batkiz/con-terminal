@@ -1242,7 +1242,7 @@ impl ConWorkspace {
             new_tab_button.child(
                 svg()
                     .path("phosphor/plus.svg")
-                    .size(ui_icon_px(theme, 13.0))
+                    .size(ui_icon_px(theme, 12.0))
                     .text_color(new_tab_icon_color),
             ),
         );
@@ -1285,7 +1285,7 @@ impl ConWorkspace {
                 .child(
                     svg()
                         .path("phosphor/sidebar.svg")
-                        .size(ui_icon_px(theme, 13.0))
+                        .size(ui_icon_px(theme, 12.0))
                         .text_color(chrome_toggle_tone(
                             theme,
                             self.left_panel_open,
@@ -1333,7 +1333,7 @@ impl ConWorkspace {
                 .child(
                     svg()
                         .path("phosphor/square-half-bottom-fill.svg")
-                        .size(ui_icon_px(theme, 13.0))
+                        .size(ui_icon_px(theme, 12.0))
                         .text_color(chrome_toggle_tone(
                             theme,
                             self.input_bar_visible,
@@ -1381,7 +1381,7 @@ impl ConWorkspace {
                 .child(
                     svg()
                         .path("phosphor/square-half-fill.svg")
-                        .size(ui_icon_px(theme, 13.0))
+                        .size(ui_icon_px(theme, 12.0))
                         .text_color(chrome_toggle_tone(
                             theme,
                             self.agent_panel_open,
@@ -1428,7 +1428,7 @@ impl ConWorkspace {
                     .child(
                         svg()
                             .path("phosphor/gear.svg")
-                            .size(ui_icon_px(theme, 13.0))
+                            .size(ui_icon_px(theme, 12.0))
                             .text_color(chrome_icon_tone(theme, compact_titlebar_progress)),
                     ),
             );

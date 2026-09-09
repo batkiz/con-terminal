@@ -1844,7 +1844,7 @@ impl Render for EditorView {
                     .child(
                         svg()
                             .path("phosphor/x.svg")
-                            .size(ui_icon_px(&theme, 9.0))
+                            .size(ui_icon_px(&theme, 8.0))
                             .text_color(fg.opacity(if is_active { 0.55 } else { 0.42 })),
                     ),
             );

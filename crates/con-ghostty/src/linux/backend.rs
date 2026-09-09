@@ -88,16 +88,8 @@ impl LinuxGhosttyApp {
     ) -> Result<Self, String> {
         let (shell_program, shell_args) = match shell.map(str::trim).filter(|s| !s.is_empty()) {
             Some(shell) => {
-                let mut argv = shell_words::split(shell)
-                    .map_err(|error| format!("invalid terminal shell command: {error}"))?
-                    .into_iter();
-                let program = argv
-                    .next()
-                    .ok_or_else(|| "terminal shell command must name a program".to_string())?;
-                (
-                    Some(program),
-                    Some(argv.map(OsString::from).collect::<Vec<_>>()),
-                )
+                let (program, args) = parse_configured_shell(shell)?;
+                (Some(program), Some(args))
             }
             None => (default_linux_shell_program(), None),
         };
@@ -208,62 +200,25 @@ impl LinuxGhosttyApp {
 
 #[cfg(test)]
 mod tests {
-    use super::LinuxGhosttyApp;
+    use super::parse_configured_shell;
 
     #[test]
     fn configured_shell_preserves_quoted_arguments() {
-        let app = LinuxGhosttyApp::new(
-            None,
-            Some("/usr/bin/fish --init-command 'echo hello world'"),
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            false,
-        )
-        .expect("valid shell command");
+        let (program, args) =
+            parse_configured_shell("/usr/bin/fish --init-command 'echo hello world'")
+                .expect("valid shell command");
 
-        let options = app.default_pty_options(None);
+        assert_eq!(program, "/usr/bin/fish");
         assert_eq!(
-            options.command_program.as_deref(),
-            Some(std::ffi::OsStr::new("/usr/bin/fish"))
+            args,
+            ["--init-command", "echo hello world"].map(std::ffi::OsString::from)
         );
-        assert_eq!(
-            options.command_args.as_deref(),
-            Some(
-                ["--init-command", "echo hello world"]
-                    .map(std::ffi::OsString::from)
-                    .as_slice()
-            )
-        );
-        assert!(options.program.is_none());
     }
 
     #[test]
     fn configured_shell_rejects_unclosed_quotes() {
-        let error = LinuxGhosttyApp::new(
-            None,
-            Some("/usr/bin/fish '"),
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            false,
-        )
-        .err()
-        .expect("invalid shell command should fail");
+        let error = parse_configured_shell("/usr/bin/fish '")
+            .expect_err("invalid shell command should fail");
 
         assert!(error.contains("invalid terminal shell command"));
     }
@@ -306,6 +261,16 @@ fn default_linux_shell_program() -> Option<String> {
         }
     }
     None
+}
+
+fn parse_configured_shell(shell: &str) -> Result<(String, Vec<OsString>), String> {
+    let mut argv = shell_words::split(shell)
+        .map_err(|error| format!("invalid terminal shell command: {error}"))?
+        .into_iter();
+    let program = argv
+        .next()
+        .ok_or_else(|| "terminal shell command must name a program".to_string())?;
+    Ok((program, argv.map(OsString::from).collect()))
 }
 
 /// One per pane. The GPUI view attaches the PTY + VT session lazily

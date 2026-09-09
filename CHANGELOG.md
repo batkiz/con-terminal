@@ -4,6 +4,19 @@ All notable changes to con are documented here.
 
 con is still pre-release, so entries may group related beta work while the product shape is stabilizing.
 
+## `v0.1.0-beta.97` - unreleased
+
+### Changed
+
+**Appearance**
+
+- Icons in terminal chrome and app UI now follow the configured terminal and
+  UI font sizes, with bounded scaling that keeps compact controls balanced.
+  _(PR [#354](https://github.com/nowledge-co/con-terminal/pull/354) by
+  [@batkiz](https://github.com/batkiz))_
+
+---
+
 ## `v0.1.0-beta.96` - 2026-09-07
 
 ### Changed

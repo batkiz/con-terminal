@@ -90,7 +90,7 @@ use con_agent::{
     AgentConfig, Conversation, ProviderKind, TerminalExecRequest, TerminalExecResponse,
 };
 use con_core::config::{
-    AppearanceConfig, Config, TabsOrientation, TerminalConfig, sanitize_app_icon,
+    AppearanceConfig, Config, TabsOrientation, TerminalConfig, sanitize_app_icon, sanitize_terminal_font_fallback,
     sanitize_terminal_font_family,
 };
 use con_core::control::{
@@ -157,6 +157,7 @@ pub struct ConWorkspace {
     /// should reinitialize a fresh tab and hide the window instead.
     is_quick_terminal: bool,
     terminal_font_family: String,
+    terminal_font_fallback: Vec<String>,
     ui_font_family: String,
     ui_font_size: f32,
     font_size: f32,

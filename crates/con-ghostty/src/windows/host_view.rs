@@ -399,13 +399,7 @@ impl RenderSession {
             // palette would leave the border showing the previous
             // theme's background. Mirror what `WindowsGhosttyApp::
             // update_appearance` does at session construction.
-            config.clear_color = [
-                theme.bg[0] as f32 / 255.0,
-                theme.bg[1] as f32 / 255.0,
-                theme.bg[2] as f32 / 255.0,
-                1.0,
-            ];
-            config.theme = Some(theme.clone());
+            config.apply_theme(theme);
             // `set_theme` bumps the VT generation itself, so the next
             // prepaint re-runs draw_cells with the new palette + new
             // clear_color + any new opacity.
@@ -426,13 +420,19 @@ impl RenderSession {
     /// Apply a live font change, rebuild cell metrics, and resize both the VT
     /// and ConPTY grid. The settings panel updates existing sessions, so only
     /// changing the app-level template is not sufficient.
-    pub fn set_font(&self, font_family: &str, font_size_px: f32) -> Result<()> {
+    pub fn set_font(
+        &self,
+        font_family: &str,
+        font_fallback: &[String],
+        font_size_px: f32,
+    ) -> Result<()> {
         let logical_size = font_size_px.max(1.0);
         let dpi = self.dpi.load(Ordering::Acquire).max(1);
         let physical_size = scale_font_size(logical_size, dpi);
         {
             let config = self.config.lock();
             if config.font_family == font_family
+                && config.font_fallback == font_fallback
                 && (config.font_size_px - physical_size).abs() <= f32::EPSILON
             {
                 return Ok(());
@@ -442,7 +442,7 @@ impl RenderSession {
         let (width, height) = {
             let renderer = self.renderer.lock();
             renderer
-                .rebuild_atlas(font_family, physical_size)
+                .rebuild_atlas(font_family, font_fallback, physical_size)
                 .context("rebuild_atlas on font change failed")?;
             renderer.dimensions_px()
         };
@@ -450,6 +450,7 @@ impl RenderSession {
         {
             let mut config = self.config.lock();
             config.font_family = font_family.to_string();
+            config.font_fallback = font_fallback.to_vec();
             config.font_size_px = physical_size;
         }
         self.geometry_sync_pending.store(true, Ordering::Release);
@@ -479,9 +480,12 @@ impl RenderSession {
             return Ok(());
         }
         let new_font = scale_font_size(*self.base_font_size_px.lock(), new_dpi);
-        let family = self.config.lock().font_family.clone();
+        let (family, fallback) = {
+            let config = self.config.lock();
+            (config.font_family.clone(), config.font_fallback.clone())
+        };
         renderer
-            .rebuild_atlas(&family, new_font)
+            .rebuild_atlas(&family, &fallback, new_font)
             .context("rebuild_atlas on DPI change failed")?;
         let mut config = self.config.lock();
         config.font_size_px = new_font;

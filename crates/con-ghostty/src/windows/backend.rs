@@ -43,6 +43,7 @@ impl WindowsGhosttyApp {
     pub fn new(
         colors: Option<&TerminalColors>,
         font_family: Option<&str>,
+        font_fallback: Option<&[String]>,
         font_size: Option<f32>,
         background_opacity: Option<f32>,
         _background_blur: Option<bool>,
@@ -58,18 +59,15 @@ impl WindowsGhosttyApp {
         if let Some(family) = font_family {
             config.font_family = family.to_string();
         }
+        if let Some(fallback) = font_fallback {
+            config.font_fallback = fallback.to_vec();
+        }
         if let Some(size) = font_size {
             config.font_size_px = size;
         }
         if let Some(colors) = colors {
             let theme = theme_from_colors(colors);
-            config.clear_color = [
-                colors.background[0] as f32 / 255.0,
-                colors.background[1] as f32 / 255.0,
-                colors.background[2] as f32 / 255.0,
-                1.0,
-            ];
-            config.theme = Some(theme);
+            config.apply_theme(&theme);
         }
         if let Some(op) = background_opacity {
             config.background_opacity = clamp_opacity(op);
@@ -102,6 +100,7 @@ impl WindowsGhosttyApp {
         &self,
         colors: &TerminalColors,
         font_family: &str,
+        font_fallback: &[String],
         font_size: f32,
         background_opacity: f32,
         _background_blur: bool,
@@ -115,14 +114,9 @@ impl WindowsGhosttyApp {
         let theme = theme_from_colors(colors);
         let mut config = self.config.lock();
         config.font_family = font_family.to_string();
+        config.font_fallback = font_fallback.to_vec();
         config.font_size_px = font_size;
-        config.clear_color = [
-            colors.background[0] as f32 / 255.0,
-            colors.background[1] as f32 / 255.0,
-            colors.background[2] as f32 / 255.0,
-            1.0,
-        ];
-        config.theme = Some(theme);
+        config.apply_theme(&theme);
         config.background_opacity = clamp_opacity(background_opacity);
         Ok(())
     }
@@ -232,6 +226,7 @@ impl WindowsGhosttyTerminal {
         &self,
         colors: &TerminalColors,
         font_family: &str,
+        font_fallback: &[String],
         font_size: f32,
         background_opacity: f32,
         _background_blur: bool,
@@ -248,7 +243,7 @@ impl WindowsGhosttyTerminal {
             // keep them live even if DirectWrite rejects a font update.
             session.set_appearance(Some(&theme), clamp_opacity(background_opacity));
             session
-                .set_font(font_family, font_size)
+                .set_font(font_family, font_fallback, font_size)
                 .map_err(|err| err.to_string())?;
         }
         Ok(())

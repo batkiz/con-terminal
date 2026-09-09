@@ -53,10 +53,28 @@ Appearance controls the parts of con you look at all day:
 Start with readability. Pick a theme with clear contrast, then adjust opacity or
 blur only if the terminal remains easy to scan.
 
+Use **Add Fallback** when the primary terminal font does not cover CJK, emoji,
+or symbols. Fallbacks are searched in the displayed order; use the arrow buttons
+to reorder them and the trash button to remove one. Con always keeps its bundled
+Nerd Font after your choices for prompt icons, followed by the operating system
+fallback cascade. Changes preview immediately in open terminal panes.
+
+The same ordered list can be configured directly in Con's TOML file:
+
+```toml
+[terminal]
+font_family = "JetBrains Mono"
+font_fallback = ["Sarasa Mono SC", "Segoe UI Emoji"]
+```
+
 Pane title bars appear only when a tab has multiple panes. Keep them on if you
 want direct close/fullscreen controls and drag-to-rearrange. Turn them off if
 you prefer a sparse terminal surface and use shortcuts or the terminal context
 menu for pane actions.
+
+Existing configuration files do not need to add `font_fallback`; omitting it
+means no user-preferred families are inserted before Con's automatic bundled
+icon and system fallbacks.
 
 con can import Ghostty themes. Copy a theme, choose **Load from Clipboard**,
 preview it, then save it when it feels right.

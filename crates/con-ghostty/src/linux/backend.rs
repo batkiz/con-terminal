@@ -87,10 +87,15 @@ impl LinuxGhosttyApp {
         clipboard_write: bool,
     ) -> Result<Self, String> {
         let (shell_program, shell_args) = match shell.map(str::trim).filter(|s| !s.is_empty()) {
-            Some(shell) => {
-                let (program, args) = parse_configured_shell(shell)?;
-                (Some(program), Some(args))
-            }
+            Some(shell) => match parse_configured_shell(shell) {
+                Ok((program, args)) => (Some(program), Some(args)),
+                Err(error) => {
+                    log::warn!(
+                        "{error}; falling back to automatic Linux shell detection instead of blocking startup"
+                    );
+                    (default_linux_shell_program(), None)
+                }
+            },
             None => (default_linux_shell_program(), None),
         };
 

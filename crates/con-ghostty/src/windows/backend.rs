@@ -113,13 +113,7 @@ impl WindowsGhosttyApp {
         let mut config = self.config.lock();
         config.font_family = font_family.to_string();
         config.font_size_px = font_size;
-        config.clear_color = [
-            colors.background[0] as f32 / 255.0,
-            colors.background[1] as f32 / 255.0,
-            colors.background[2] as f32 / 255.0,
-            1.0,
-        ];
-        config.theme = Some(theme);
+        config.apply_theme(&theme);
         config.background_opacity = clamp_opacity(background_opacity);
         Ok(())
     }

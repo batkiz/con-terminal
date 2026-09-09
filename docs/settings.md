@@ -14,8 +14,15 @@ General contains app-level behavior:
 
 - update channel and version
 - manual update check when the current channel supports it
+- default shell command for new panes
 - saved terminal text privacy
 - skill source folders
+
+**Default Shell** overrides the command Con starts in new panes. Leave it blank
+to follow the platform default: your Windows Terminal profile on Windows, or
+`$SHELL` on macOS and Linux. Arguments and quoted paths are supported. Saving
+the setting and restarting Con affects new panes; existing shells are left
+alone.
 
 If you prefer con not to save terminal text between launches, turn off
 **Restore Terminal Text** in General. Layout profiles never include terminal

@@ -3271,6 +3271,19 @@ impl SettingsPanel {
         }
 
         container
+        .child(
+            div()
+                .flex()
+                .flex_col()
+                .gap(px(8.0))
+                .child(group_label("Terminal", &theme))
+                .child(card(theme, card_opacity).child(row_input_with_hint(
+                    "Default Shell",
+                    "Command used by new panes after restarting Con. Leave blank for automatic detection.",
+                    &self.shell_input,
+                    theme,
+                ))),
+        )
         // Continuity
         .child(
             div()
@@ -3797,20 +3810,6 @@ impl SettingsPanel {
                         .child(row_separator(theme))
                         .child(row_field("Terminal Size", &font_size_input)),
                 ),
-        );
-
-        content = content.child(
-            div()
-                .flex()
-                .flex_col()
-                .gap(px(8.0))
-                .child(group_label("Shell", &theme))
-                .child(card(theme, card_opacity).child(row_input_with_hint(
-                    "Default Shell",
-                    "Command used by new terminal panes after restarting Con. Leave blank for automatic detection.",
-                    &self.shell_input,
-                    theme,
-                ))),
         );
 
         content = content.child(

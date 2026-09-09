@@ -394,7 +394,7 @@ impl Render for FileTreeView {
                                     .flex()
                                     .items_center()
                                     .justify_center()
-                                    .size(px(ICON_SIZE))
+                                    .size(ui_icon_px(&list_theme, ICON_SIZE))
                                     .flex_shrink_0()
                                     .cursor_pointer()
                                     .opacity(if is_active { 0.4 } else { 0.0 })
@@ -418,7 +418,7 @@ impl Render for FileTreeView {
                                     .child(
                                         svg()
                                             .path("phosphor/arrow-square-out.svg")
-                                            .size(px(ICON_SIZE))
+                                            .size(ui_icon_px(&list_theme, ICON_SIZE))
                                             .text_color(list_theme.muted_foreground),
                                     )
                                     .into_any_element()

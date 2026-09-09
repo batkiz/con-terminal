@@ -4489,7 +4489,7 @@ impl SettingsPanel {
                                 Some(
                                     svg()
                                         .path("phosphor/check.svg")
-                                        .size(px(10.0))
+                                        .size(ui_icon_px(theme, 10.0))
                                         .text_color(theme.primary),
                                 )
                             } else {

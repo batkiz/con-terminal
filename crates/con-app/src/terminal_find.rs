@@ -7,6 +7,8 @@ use gpui_component::button::{Button, ButtonVariants as _};
 use gpui_component::input::{Input, InputEvent, InputState};
 use gpui_component::{ActiveTheme, Disableable as _, Icon, Sizable as _};
 
+use crate::ui_scale::mono_icon_px;
+
 const SEARCH_DEBOUNCE: Duration = Duration::from_millis(300);
 
 pub struct TerminalFindDismissed;
@@ -326,7 +328,7 @@ impl Render for TerminalFind {
                 Icon::default()
                     .path("phosphor/magnifying-glass.svg")
                     .text_color(icon_color)
-                    .size(px(14.0)),
+                    .size(mono_icon_px(theme, 14.0)),
             )
             .child(
                 Input::new(&self.input)

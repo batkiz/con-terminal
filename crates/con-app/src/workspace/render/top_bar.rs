@@ -459,7 +459,7 @@ impl ConWorkspace {
                     .child(
                         svg()
                             .path("phosphor/x.svg")
-                            .size(ui_icon_px(theme, 11.0))
+                            .size(ui_icon_px(theme, 10.0))
                             .text_color(theme.muted_foreground.opacity(0.42)),
                     );
 

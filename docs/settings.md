@@ -53,6 +53,10 @@ Appearance controls the parts of con you look at all day:
 Start with readability. Pick a theme with clear contrast, then adjust opacity or
 blur only if the terminal remains easy to scan.
 
+UI and terminal font sizes also scale the icons beside their text. Icon growth
+is intentionally bounded, so larger type remains balanced in narrow panes and
+compact window chrome.
+
 Pane title bars appear only when a tab has multiple panes. Keep them on if you
 want direct close/fullscreen controls and drag-to-rearrange. Turn them off if
 you prefer a sparse terminal surface and use shortcuts or the terminal context
